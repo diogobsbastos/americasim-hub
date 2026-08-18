@@ -5,6 +5,12 @@ import { usePathname } from "next/navigation";
 
 // Ordem de construcao da SPEC/08 §11. O que ainda nao existe aparece marcado
 // "em breve" em vez de sumir: o menu tambem serve para você saber o que falta.
+//
+// Estoque e area PROPRIA, e nao so uma aba dentro de cada produto. Enquanto ha
+// um produto so, esconder o estoque la dentro parece organizado; com dez
+// fornecedores e trinta variantes, ninguem entra produto por produto para
+// descobrir o que esta acabando. A tela dentro do produto continua existindo
+// como atalho e como lugar da ENTRADA de lote.
 const AREAS = [
   {
     grupo: "Operação",
@@ -12,6 +18,7 @@ const AREAS = [
       { href: "/painel", rotulo: "Painel", pronto: true, exato: true },
       { href: "/painel/vendas", rotulo: "Vendas", pronto: true, exato: false },
       { href: "/painel/produtos", rotulo: "Produtos", pronto: true, exato: false },
+      { href: "/painel/estoque", rotulo: "Estoque", pronto: true, exato: false },
     ],
   },
   {
