@@ -22,6 +22,17 @@ export async function generateMetadata({ params }: { params: Promise<{ tipo: str
   return { title: `${c?.nome ?? "Conexão"} — AmericaSim`, robots: { index: false, follow: false } };
 }
 
+const RECADO: Record<string, string> = {
+  papel: "Só um admin pode mexer nas conexões.",
+  conector: "Conector desconhecido ou ainda não disponível.",
+  sem_aplicacao: "Falta guardar o Client ID antes de autorizar.",
+  sem_segredo: "Falta a senha da aplicação.",
+  recusado: "A autorização foi recusada no marketplace. Nada foi alterado.",
+  estado: "O vaivém da autorização não bateu (pode ter demorado demais, ou o link foi aberto fora daqui). Comece de novo.",
+  troca: "O marketplace recusou a troca do código pelo token. O motivo está nos erros de sincronia, abaixo.",
+  rede: "Não consegui falar com o marketplace. Tente de novo.",
+};
+
 function Marca({ ligar }: { ligar: boolean }) {
   return (
     <span style={{ color: ligar ? "var(--ok)" : "var(--texto-fraco)", fontWeight: 700 }}>
@@ -74,6 +85,13 @@ export default async function ConectorDetalhe({
         <p>{c.resumo}</p>
       </div>
 
+      {sp.erro ? (
+        <div className="cartao perigo" style={{ marginBottom: 18 }}>
+          <p style={{ margin: 0, color: "var(--erro)" }}>
+            {RECADO[sp.erro] ?? "Não deu para completar a conexão."}
+          </p>
+        </div>
+      ) : null}
       {sp.ok === "conectado" ? (
         <div className="cartao" style={{ marginBottom: 18, borderLeft: "4px solid var(--ok)" }}>
           <p style={{ margin: 0, color: "var(--ok)" }}>Conectado.</p>
@@ -93,6 +111,7 @@ export default async function ConectorDetalhe({
             detalhe={e.detalhe}
             clientId={e.clientId}
             temSegredo={e.temSegredo}
+            ondeSegredo={e.ondeSegredo}
             envSecret={c.envSecret}
             urlDev={c.urlDev}
             urlRetorno={`${base}/painel/conexoes/${c.tipo}/retorno`}

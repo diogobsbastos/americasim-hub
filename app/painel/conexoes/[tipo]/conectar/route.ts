@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { conectorPorTipo } from "../../../../../lib/conectores";
+import { lerSegredoApp } from "../../../../../lib/segredo-app";
 import { db } from "../../../../../lib/db";
 import { auditar, usuarioDaSessao } from "../../../../../lib/painel/sessao";
 
@@ -29,7 +30,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ tipo: string }
 
   const p = await db.query("select valor from parametro where chave = $1", [c.paramClientId]);
   const clientId = (p.rows[0]?.valor ?? "").trim();
-  const segredo = (process.env[c.envSecret] ?? "").trim();
+  // Ambiente primeiro, banco depois — lerSegredoApp cuida da ordem.
+  const segredo = await lerSegredoApp(c.envSecret);
   if (!clientId) return NextResponse.redirect(await destino("/painel/conexoes?erro=sem_aplicacao"));
   if (!segredo) return NextResponse.redirect(await destino("/painel/conexoes?erro=sem_segredo"));
 

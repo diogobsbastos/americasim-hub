@@ -2,6 +2,7 @@ import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { salvarCredencial } from "../../../../../lib/canal-credencial";
 import { conectorPorTipo } from "../../../../../lib/conectores";
+import { lerSegredoApp } from "../../../../../lib/segredo-app";
 import { db } from "../../../../../lib/db";
 import { auditar, usuarioDaSessao } from "../../../../../lib/painel/sessao";
 
@@ -47,7 +48,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ tipo: string }>
 
   const p = await db.query("select valor from parametro where chave = $1", [c.paramClientId]);
   const clientId = (p.rows[0]?.valor ?? "").trim();
-  const segredo = (process.env[c.envSecret] ?? "").trim();
+  const segredo = await lerSegredoApp(c.envSecret);
   if (!clientId || !segredo) return volta("sem_aplicacao");
 
   let dados: any;
@@ -141,7 +142,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ tipo: string }>
   async function volta(erro: string, ok = false): Promise<Response> {
     const base = await baseExterna();
     const q = ok ? "?ok=conectado" : `?erro=${encodeURIComponent(erro)}`;
-    return NextResponse.redirect(`${base}/painel/conexoes${q}`);
+    return NextResponse.redirect(`${base}/painel/conexoes/${tipo}${q}`);
   }
 }
 

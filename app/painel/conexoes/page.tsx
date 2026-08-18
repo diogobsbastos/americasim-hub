@@ -11,10 +11,10 @@ const RECADO: Record<string, string> = {
   papel: "Só um admin pode mexer nas conexões.",
   conector: "Conector desconhecido ou ainda não disponível.",
   sem_aplicacao: "Falta guardar o Client ID antes de autorizar.",
-  sem_segredo: "Falta a senha da aplicação no ambiente do servidor.",
+  sem_segredo: "Falta a senha da aplicação.",
   recusado: "A autorização foi recusada no marketplace. Nada foi alterado.",
   estado: "O vaivém da autorização não bateu (pode ter demorado demais, ou o link foi aberto fora daqui). Comece de novo.",
-  troca: "O marketplace recusou a troca do código pelo token. O motivo está nos erros de sincronia abaixo.",
+  troca: "O marketplace recusou a troca do código pelo token. O motivo está nos erros de sincronia.",
   rede: "Não consegui falar com o marketplace. Tente de novo.",
 };
 
@@ -78,6 +78,7 @@ export default async function Conexoes({
             detalhe={e.detalhe}
             clientId={e.clientId}
             temSegredo={e.temSegredo}
+            ondeSegredo={e.ondeSegredo}
             envSecret={e.conector.envSecret}
             urlDev={e.conector.urlDev}
             urlRetorno={`${base}/painel/conexoes/${e.conector.tipo}/retorno`}
@@ -101,9 +102,9 @@ export default async function Conexoes({
           borderLeft: "3px solid var(--borda)", paddingLeft: 12,
         }}
       >
-        <b>O token de acesso é guardado cifrado e amarrado ao canal.</b> Se alguém copiar a linha
-        de credencial de um canal para outro, a leitura falha em vez de funcionar. E ele nunca
-        aparece em tela, log ou auditoria — nem aqui.
+        <b>A senha da aplicação e o token de acesso são guardados cifrados</b>, com a chave-mãe
+        fora do banco. Um backup roubado, sozinho, não abre nada — e nenhum dos dois volta para
+        esta tela depois de salvo.
       </p>
     </>
   );
