@@ -3,6 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { cifrarCodigo, impressaoCodigo, problemaComAChave } from "../../../../../lib/cripto-esim";
 import { db } from "../../../../../lib/db";
+import {
+  corrigir,
+  darBaixa,
+  retornarAoEstoque,
+  STATUS_BAIXA,
+  type CamposCorrigiveis,
+  type StatusBaixa,
+} from "../../../../../lib/estoque";
 import { lerLote, repartirCusto } from "../../../../../lib/lote";
 import { auditar, usuarioDaSessao } from "../../../../../lib/painel/sessao";
 
@@ -16,6 +24,7 @@ import { auditar, usuarioDaSessao } from "../../../../../lib/painel/sessao";
 // O texto claro so existe dentro desta funcao, entre ler o formulario e gravar.
 
 const PODE_IMPORTAR = ["admin", "operacao"];
+const PODE_MOVER = ["admin", "operacao"];
 
 export interface EstadoLote {
   erro: string;
@@ -24,6 +33,12 @@ export interface EstadoLote {
 }
 
 export const ESTADO_LOTE_INICIAL: EstadoLote = { erro: "", ok: "", detalhes: [] };
+
+function recarregar(handle: string): void {
+  revalidatePath(`/painel/produtos/${handle}/estoque`);
+  revalidatePath(`/painel/produtos/${handle}`);
+  revalidatePath("/painel/produtos");
+}
 
 export async function importarLote(
   _anterior: EstadoLote,
@@ -61,11 +76,7 @@ export async function importarLote(
 
   const parse = lerLote(texto);
   if (parse.linhas.length === 0) {
-    return {
-      erro: "Nenhum código válido no texto.",
-      ok: "",
-      detalhes: parse.erros.slice(0, 20),
-    };
+    return { erro: "Nenhum código válido no texto.", ok: "", detalhes: parse.erros.slice(0, 20) };
   }
   // Linha ruim NAO passa despercebida: importar um lote pela metade sem avisar
   // e cliente pagando e nao recebendo, semanas depois, sem ninguem entender.
@@ -79,13 +90,9 @@ export async function importarLote(
 
   let custos: string[] | null = null;
   if (custoTotal) {
-    const s = custoTotal.includes(",")
-      ? custoTotal.replace(/\./g, "").replace(",", ".")
-      : custoTotal;
+    const s = custoTotal.includes(",") ? custoTotal.replace(/\./g, "").replace(",", ".") : custoTotal;
     custos = repartirCusto(s, parse.linhas.length);
-    if (!custos) {
-      return { erro: `Custo total inválido: "${custoTotal}".`, ok: "", detalhes: [] };
-    }
+    if (!custos) return { erro: `Custo total inválido: "${custoTotal}".`, ok: "", detalhes: [] };
   }
 
   let cambioNum: string | null = null;
@@ -108,6 +115,7 @@ export async function importarLote(
   const c = await db.connect();
   let inseridos = 0;
   let repetidos = 0;
+  const novos: string[] = [];
 
   try {
     await c.query("begin");
@@ -120,26 +128,17 @@ export async function importarLote(
 
     for (let i = 0; i < parse.linhas.length; i++) {
       const l = parse.linhas[i];
-      // Duas redes, porque uma so nao cobre.
-      // 1) O UNIQUE parcial de iccid barra o mesmo lote importado duas vezes.
-      //    Sem ele, dois clientes receberiam o mesmo eSIM pelo caminho da
-      //    importacao, e a trava de alocacao nao teria como defender.
-      // 2) Mas lote de operadora nem sempre vem com ICCID, e ai o UNIQUE
-      //    parcial nao pega nada. Entao conferimos tambem pelo proprio codigo,
-      //    que e o que de fato identifica o eSIM.
+      // Duas redes, porque uma so nao cobre. O UNIQUE parcial de iccid barra o
+      // mesmo lote importado duas vezes; mas lote de operadora nem sempre vem
+      // com ICCID, entao conferimos tambem pelo proprio codigo.
       //
-      // A conferencia do codigo agora e pela IMPRESSAO DIGITAL, nao pelo bytea:
-      // com a cifra, o mesmo codigo gera bytea diferente a cada gravacao, e
-      // `where codigo_lpa = $1` nunca mais encontraria nada — a checagem
-      // passaria calada e o repetido entraria.
+      // A conferencia do codigo e pela IMPRESSAO DIGITAL, nao pelo bytea: com a
+      // cifra, o mesmo codigo gera bytea diferente a cada gravacao, e
+      // `where codigo_lpa = $1` nunca mais encontraria nada.
       const impressao = impressaoCodigo(l.lpa);
 
-      // A segunda metade do OR e a ponte da transicao: enquanto houver linha
-      // legada (cifrado = false, codigo_hash nulo), so a impressao digital nao
-      // acha o repetido — a linha antiga nao tem impressao nenhuma. Sem isto,
-      // reimportar um lote antes de rodar scripts/cifrar-estoque.mjs criaria
-      // uma segunda copia do mesmo eSIM. A condicao se apaga sozinha quando
-      // nao sobrar nenhuma linha em texto claro.
+      // A segunda metade do OR e a ponte da transicao para as linhas legadas em
+      // texto claro. Ela se apaga sozinha quando nao sobrar nenhuma.
       const jaExiste = await c.query(
         `select 1 from estoque_esim
           where codigo_hash = $1
@@ -171,18 +170,30 @@ export async function importarLote(
           lote,
         ],
       );
-      if (r.rows.length > 0) inseridos++;
-      else repetidos++;
+      if (r.rows.length > 0) {
+        inseridos++;
+        novos.push(r.rows[0].id);
+      } else {
+        repetidos++;
+      }
+    }
+
+    // Entrada tambem e movimento: sem isto o extrato de uma linha comeca no meio
+    // da historia, e a primeira pergunta de qualquer conferencia e "de onde este
+    // codigo veio?".
+    for (const id of novos) {
+      await c.query(
+        `insert into movimento_estoque
+           (estoque_id, tipo, status_antes, status_depois, motivo, usuario_id)
+         values ($1, 'entrada', null, 'disponivel', $2, $3)`,
+        [id, `importação do lote "${lote}"`, u.id],
+      );
     }
 
     await c.query("commit");
   } catch (e: any) {
     await c.query("rollback").catch(() => {});
     console.error("importarLote:", e);
-    // 23505 no indice da impressao digital significa que o indice unico do banco
-    // pegou o que a conferencia acima deixou passar — corrida entre duas
-    // importacoes simultaneas. E exatamente para isso que ele existe. Nada foi
-    // gravado, entao basta reenviar.
     if (e?.code === "23505" && String(e?.constraint ?? "").includes("codigo_hash")) {
       return {
         erro: "Um destes códigos já entrou no estoque enquanto esta importação rodava. Nada foi gravado — reenvie.",
@@ -204,9 +215,7 @@ export async function importarLote(
     depois: { lote, inseridos, repetidos, custo_total: custoTotal || null, cambio: cambioNum },
   });
 
-  revalidatePath(`/painel/produtos/${handle}/estoque`);
-  revalidatePath(`/painel/produtos/${handle}`);
-  revalidatePath("/painel/produtos");
+  recarregar(handle);
 
   const partes = [`${inseridos} código(s) importado(s) no lote "${lote}"`];
   if (repetidos > 0) partes.push(`${repetidos} já existia(m) no estoque e foi(ram) ignorado(s)`);
@@ -214,4 +223,171 @@ export async function importarLote(
   if (custos) partes.push(`custo unitário ≈ R$ ${custos[0].replace(".", ",")}`);
 
   return { erro: "", ok: partes.join(" · "), detalhes: [] };
+}
+
+// ============================================================================
+// Movimentacao: retirar, devolver ao estoque e corrigir (migracao 006).
+//
+// O que o Bling chama de "retirar estoque" nao existe aqui como subtracao de um
+// numero. Cada codigo e uma linha, entao a pergunta nao e "quantos tirar" e sim
+// "tirar QUAL, e por que". O motivo vira status, e o par (status, motivo) fica
+// no extrato da linha.
+// ============================================================================
+
+export interface EstadoMovimento {
+  erro: string;
+  ok: string;
+  detalhes: string[];
+}
+
+export const ESTADO_MOVIMENTO_INICIAL: EstadoMovimento = { erro: "", ok: "", detalhes: [] };
+
+async function autorizar(): Promise<{ id: string; papel: string } | EstadoMovimento> {
+  const u = await usuarioDaSessao();
+  if (!u) return { erro: "Sessão expirada. Entre de novo.", ok: "", detalhes: [] };
+  if (!PODE_MOVER.includes(u.papel)) {
+    return { erro: "Seu papel não permite mexer no estoque.", ok: "", detalhes: [] };
+  }
+  return { id: u.id, papel: u.papel };
+}
+
+// Mostra no maximo 10 recusas. Uma lista de 300 linhas vermelhas nao e mais
+// informacao, e so ruido que o operador para de ler.
+function detalharRecusas(recusados: { id: string; porque: string }[]): string[] {
+  const d = recusados.slice(0, 10).map((r) => `${r.id.slice(0, 8)}… — ${r.porque}`);
+  if (recusados.length > 10) d.push(`e mais ${recusados.length - 10}…`);
+  return d;
+}
+
+export async function darBaixaAcao(
+  _anterior: EstadoMovimento,
+  form: FormData,
+): Promise<EstadoMovimento> {
+  const u = await autorizar();
+  if ("erro" in u) return u;
+
+  const handle = String(form.get("handle") ?? "");
+  const ids = form.getAll("ids").map((x) => String(x));
+  const status = String(form.get("status") ?? "") as StatusBaixa;
+  const motivo = String(form.get("motivo") ?? "");
+
+  if (ids.length === 0) return { erro: "Selecione pelo menos um código.", ok: "", detalhes: [] };
+  if (!STATUS_BAIXA.includes(status)) {
+    return { erro: "Escolha o motivo da baixa.", ok: "", detalhes: [] };
+  }
+
+  try {
+    const r = await darBaixa(ids, status, motivo, u.id);
+    await auditar("estoque.baixa", {
+      usuarioId: u.id,
+      entidade: "estoque_esim",
+      // entidade_id e UUID: mandar "3 codigos" faria o insert falhar e a
+      // auditoria sumir calada. Com varios alvos, a lista vai no `depois`.
+      entidadeId: ids.length === 1 ? ids[0] : null,
+      depois: { status, motivo, pedidos: ids.length, baixados: r.movidos, recusados: r.recusados.length },
+    });
+    recarregar(handle);
+
+    if (r.movidos === 0) {
+      return { erro: "Nenhum código saiu do estoque.", ok: "", detalhes: detalharRecusas(r.recusados) };
+    }
+    return {
+      erro: "",
+      ok:
+        `${r.movidos} código(s) baixado(s) como "${status}".` +
+        (r.recusados.length ? ` ${r.recusados.length} recusado(s).` : ""),
+      detalhes: detalharRecusas(r.recusados),
+    };
+  } catch (e: any) {
+    console.error("darBaixaAcao:", e);
+    return { erro: "Falha ao dar baixa. Nada foi alterado.", ok: "", detalhes: [String(e?.message ?? "")] };
+  }
+}
+
+export async function retornarAcao(
+  _anterior: EstadoMovimento,
+  form: FormData,
+): Promise<EstadoMovimento> {
+  const u = await autorizar();
+  if ("erro" in u) return u;
+
+  const handle = String(form.get("handle") ?? "");
+  const ids = form.getAll("ids").map((x) => String(x));
+  const motivo = String(form.get("motivo") ?? "");
+  if (ids.length === 0) return { erro: "Selecione pelo menos um código.", ok: "", detalhes: [] };
+
+  try {
+    const r = await retornarAoEstoque(ids, motivo, u.id);
+    await auditar("estoque.retorno", {
+      usuarioId: u.id,
+      entidade: "estoque_esim",
+      entidadeId: ids.length === 1 ? ids[0] : null,
+      depois: { motivo, pedidos: ids.length, devolvidos: r.movidos, recusados: r.recusados.length },
+    });
+    recarregar(handle);
+
+    if (r.movidos === 0) {
+      return { erro: "Nenhum código voltou ao estoque.", ok: "", detalhes: detalharRecusas(r.recusados) };
+    }
+    return {
+      erro: "",
+      ok:
+        `${r.movidos} código(s) de volta como disponível.` +
+        (r.recusados.length ? ` ${r.recusados.length} recusado(s).` : ""),
+      detalhes: detalharRecusas(r.recusados),
+    };
+  } catch (e: any) {
+    console.error("retornarAcao:", e);
+    return { erro: "Falha ao devolver ao estoque. Nada foi alterado.", ok: "", detalhes: [String(e?.message ?? "")] };
+  }
+}
+
+export async function corrigirAcao(
+  _anterior: EstadoMovimento,
+  form: FormData,
+): Promise<EstadoMovimento> {
+  const u = await autorizar();
+  if ("erro" in u) return u;
+
+  const handle = String(form.get("handle") ?? "");
+  const ids = form.getAll("ids").map((x) => String(x));
+  const motivo = String(form.get("motivo") ?? "");
+  if (ids.length === 0) return { erro: "Selecione pelo menos um código.", ok: "", detalhes: [] };
+
+  // Campo em branco significa "nao mexe neste campo", nunca "apaga o valor".
+  // Apagar por omissao seria o operador zerar a validade de 200 codigos sem
+  // querer, so por ter clicado em Aplicar com o formulario vazio.
+  const campos: CamposCorrigiveis = {};
+  for (const c of ["operadora", "validade", "lote", "custo_brl"] as const) {
+    const v = String(form.get(c) ?? "").trim();
+    if (v !== "") campos[c] = v;
+  }
+  if (Object.keys(campos).length === 0) {
+    return {
+      erro: "Preencha ao menos um campo para corrigir. Campo em branco não altera nada.",
+      ok: "",
+      detalhes: [],
+    };
+  }
+
+  try {
+    const r = await corrigir(ids, campos, motivo, u.id, u.papel === "admin");
+    await auditar("estoque.corrigir", {
+      usuarioId: u.id,
+      entidade: "estoque_esim",
+      entidadeId: ids.length === 1 ? ids[0] : null,
+      depois: { campos: Object.keys(campos), motivo, alvos: ids.length, alterados: r.alterados },
+    });
+    recarregar(handle);
+    return {
+      erro: "",
+      ok: `${r.alterados} código(s) corrigido(s): ${Object.keys(campos).join(", ")}.`,
+      detalhes: [],
+    };
+  } catch (e: any) {
+    console.error("corrigirAcao:", e);
+    // Erro de validacao e de papel sao mensagens escritas para o operador ler —
+    // engoli-las num "falha generica" faria ele tentar de novo do mesmo jeito.
+    return { erro: String(e?.message ?? "Falha ao corrigir. Nada foi alterado."), ok: "", detalhes: [] };
+  }
 }
