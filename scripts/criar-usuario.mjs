@@ -22,6 +22,15 @@ import pg from "pg";
 const MINIMO = 8;
 const PAPEIS = ["admin", "operacao", "atendimento", "leitura"];
 
+// Teclas de controle por nome. Escape textual, nunca o byte cru: byte invisivel
+// no fonte nao sobrevive a copiar-colar nem a editor que normaliza, e deixa a
+// comparacao ilegivel no diff.
+const ESC = "";        // inicio de sequencia de seta/Home/Delete
+const CTRL_C = "";
+const CTRL_D = "";
+const CTRL_U = "";     // limpa a linha
+const BACKSPACE = "";  // o terminal manda DEL, nao \b
+
 // ---------------------------------------------------------------- 1. senha
 
 function hashSenha(senha) {
@@ -79,21 +88,21 @@ function lerSenhaDoTerminal(rotulo) {
           if (/[A-Za-z~]/.test(ch)) emEscape = false;
           continue;
         }
-        if (ch === "") { emEscape = true; continue; }
+        if (ch === ESC) { emEscape = true; continue; }
 
-        if (ch === "\r" || ch === "\n") {      // Enter: terminou
+        if (ch === "\r" || ch === "\n") {          // Enter: terminou
           saida.write("\n");
           encerrar();
           resolve(buffer);
           return;
         }
-        if (ch === "") {                  // Ctrl-C
+        if (ch === CTRL_C) {
           saida.write("\n");
           encerrar();
           reject(new Error("cancelado"));
           return;
         }
-        if (ch === "") {                  // Ctrl-D
+        if (ch === CTRL_D) {
           if (buffer.length === 0) {
             saida.write("\n");
             encerrar();
@@ -102,7 +111,7 @@ function lerSenhaDoTerminal(rotulo) {
           }
           continue;
         }
-        if (ch === "" || ch === "\b") {   // Backspace
+        if (ch === BACKSPACE || ch === "\b") {
           if (buffer.length > 0) {
             // Apagar por PONTO DE CODIGO, nao por unidade UTF-16: senha com
             // acento ou emoji perderia meio caractere e o hash sairia de outra
@@ -114,12 +123,12 @@ function lerSenhaDoTerminal(rotulo) {
           }
           continue;
         }
-        if (ch === "") {                  // Ctrl-U: limpa a linha
+        if (ch === CTRL_U) {
           saida.write("\b \b".repeat([...buffer].length));
           buffer = "";
           continue;
         }
-        if (ch < " ") continue;                 // outros controles: ignorar
+        if (ch < " ") continue;                     // outros controles: ignorar
 
         buffer += ch;
         saida.write("*");
