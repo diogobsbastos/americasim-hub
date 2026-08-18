@@ -8,10 +8,12 @@ export default function FormCompra({
   sku,
   tentativa,
   disponivel,
+  rotulo = "Comprar",
 }: {
   sku: string;
   tentativa: string;
   disponivel: boolean;
+  rotulo?: string;
 }) {
   const [estado, acao, pendente] = useActionState(comprar, ESTADO_COMPRA_INICIAL);
 
@@ -32,7 +34,7 @@ export default function FormCompra({
         disabled={!disponivel || pendente}
       />
       <button type="submit" disabled={!disponivel || pendente}>
-        {pendente ? "Processando…" : disponivel ? "Comprar" : "Esgotado"}
+        {pendente ? "Processando…" : disponivel ? rotulo : "Esgotado"}
       </button>
       {estado.erro ? <p className="erro">{estado.erro}</p> : null}
     </form>
