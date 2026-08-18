@@ -1,7 +1,10 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { importarLote, ESTADO_LOTE_INICIAL } from "./acoes";
+import { importarLote } from "./acoes";
+// O estado inicial vem de ./tipos, NUNCA de ./acoes: modulo "use server" so
+// exporta funcao assincrona, e uma constante importada de la chega undefined.
+import { ESTADO_LOTE_INICIAL } from "./tipos";
 
 // Importacao de lote. O contador de codigos e a divisao do custo aparecem
 // enquanto se digita, porque conferir "quantos entraram" DEPOIS de gravar e
@@ -32,6 +35,10 @@ export default function FormLote({
   const [estado, acao, pendente] = useActionState(importarLote, ESTADO_LOTE_INICIAL);
   const [codigos, setCodigos] = useState("");
   const [custo, setCusto] = useState("");
+
+  // Cinto de seguranca: se o estado vier torto por qualquer motivo, a tela
+  // mostra menos coisa em vez de derrubar a pagina inteira.
+  const detalhes = estado?.detalhes ?? [];
 
   const n = contarCodigos(codigos);
   const total = numero(custo);
@@ -145,13 +152,13 @@ export default function FormLote({
         <button type="submit" disabled={pendente || n === 0}>
           {pendente ? "Importando…" : `Importar ${n || ""} código${n === 1 ? "" : "s"}`}
         </button>
-        {estado.erro ? <span style={{ color: "var(--erro)" }}>{estado.erro}</span> : null}
-        {estado.ok ? <span style={{ color: "var(--ok)" }}>{estado.ok}</span> : null}
+        {estado?.erro ? <span style={{ color: "var(--erro)" }}>{estado.erro}</span> : null}
+        {estado?.ok ? <span style={{ color: "var(--ok)" }}>{estado.ok}</span> : null}
       </div>
 
-      {estado.detalhes.length > 0 ? (
+      {detalhes.length > 0 ? (
         <ul style={{ margin: "12px 0 0", paddingLeft: 20, color: "var(--erro)", fontSize: "0.84rem" }}>
-          {estado.detalhes.map((d, i) => (
+          {detalhes.map((d, i) => (
             <li key={i}>{d}</li>
           ))}
         </ul>

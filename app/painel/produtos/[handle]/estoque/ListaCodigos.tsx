@@ -1,12 +1,12 @@
 "use client";
 
 import { useActionState, useMemo, useState, type CSSProperties } from "react";
-import {
-  corrigirAcao,
-  darBaixaAcao,
-  retornarAcao,
-  ESTADO_MOVIMENTO_INICIAL,
-} from "./acoes";
+import { corrigirAcao, darBaixaAcao, retornarAcao } from "./acoes";
+// O estado inicial vem de ./tipos, NUNCA de ./acoes: modulo "use server" so
+// exporta funcao assincrona, e uma constante importada de la chega undefined —
+// o useActionState comeca com undefined e a primeira leitura de
+// `estado.detalhes.length` derruba a pagina inteira, sem o build reclamar.
+import { ESTADO_MOVIMENTO_INICIAL } from "./tipos";
 
 // A lista codigo a codigo. O CODIGO DO eSIM NAO ESTA AQUI e nao pode estar: ele
 // e o produto, e esta tela e vista por mais gente do que o cofre. O que
@@ -51,14 +51,17 @@ function brl(v: string | null): string {
 }
 
 function Recado({ e }: { e: { erro: string; ok: string; detalhes: string[] } }) {
-  if (!e.erro && !e.ok) return null;
+  // Tudo com `?.`: se o estado vier torto, a tela mostra menos coisa em vez de
+  // derrubar a pagina.
+  const detalhes = e?.detalhes ?? [];
+  if (!e?.erro && !e?.ok) return null;
   return (
     <div style={{ marginTop: 10, fontSize: "0.86rem" }}>
-      {e.erro ? <p style={{ color: "var(--erro)", margin: 0 }}>{e.erro}</p> : null}
-      {e.ok ? <p style={{ color: "var(--ok)", margin: 0 }}>{e.ok}</p> : null}
-      {e.detalhes.length > 0 ? (
+      {e?.erro ? <p style={{ color: "var(--erro)", margin: 0 }}>{e.erro}</p> : null}
+      {e?.ok ? <p style={{ color: "var(--ok)", margin: 0 }}>{e.ok}</p> : null}
+      {detalhes.length > 0 ? (
         <ul style={{ color: "var(--texto-fraco)", margin: "6px 0 0", paddingLeft: 18 }}>
-          {e.detalhes.map((d, i) => (
+          {detalhes.map((d, i) => (
             <li key={i}>{d}</li>
           ))}
         </ul>
@@ -83,6 +86,7 @@ export default function ListaCodigos({
   podeCusto: boolean;
   truncado: number;
 }) {
+  const linhasSeguras = linhas ?? [];
   const [sel, setSel] = useState<Set<string>>(new Set());
 
   const [eBaixa, aBaixa, pBaixa] = useActionState(darBaixaAcao, ESTADO_MOVIMENTO_INICIAL);
@@ -94,14 +98,14 @@ export default function ListaCodigos({
   // aprende a ignorar o resultado.
   const conta = useMemo(() => {
     let disponiveis = 0, baixados = 0, travados = 0;
-    for (const l of linhas) {
+    for (const l of linhasSeguras) {
       if (!sel.has(l.id)) continue;
       if (l.status === "disponivel") disponiveis++;
       else if (STATUS_BAIXA.includes(l.status)) baixados++;
       else travados++;
     }
     return { disponiveis, baixados, travados };
-  }, [sel, linhas]);
+  }, [sel, linhasSeguras]);
 
   function alternar(id: string) {
     setSel((s) => {
@@ -112,9 +116,9 @@ export default function ListaCodigos({
     });
   }
 
-  const todosMarcados = linhas.length > 0 && sel.size === linhas.length;
+  const todosMarcados = linhasSeguras.length > 0 && sel.size === linhasSeguras.length;
   function alternarTodos() {
-    setSel(todosMarcados ? new Set() : new Set(linhas.map((l) => l.id)));
+    setSel(todosMarcados ? new Set() : new Set(linhasSeguras.map((l) => l.id)));
   }
 
   const ocultos = [...sel].map((id) => <input key={id} type="hidden" name="ids" value={id} />);
@@ -145,14 +149,14 @@ export default function ListaCodigos({
             </tr>
           </thead>
           <tbody>
-            {linhas.length === 0 ? (
+            {linhasSeguras.length === 0 ? (
               <tr>
                 <td colSpan={9} style={{ ...td, color: "var(--texto-fraco)" }}>
                   Nenhum código com esses filtros.
                 </td>
               </tr>
             ) : null}
-            {linhas.map((l) => (
+            {linhasSeguras.map((l) => (
               <tr
                 key={l.id}
                 style={{
@@ -189,7 +193,7 @@ export default function ListaCodigos({
 
       {truncado > 0 ? (
         <p style={{ color: "var(--alerta)", fontSize: "0.82rem", marginTop: 8 }}>
-          Mostrando as primeiras {linhas.length} linhas — há mais {truncado} fora desta lista.
+          Mostrando as primeiras {linhasSeguras.length} linhas — há mais {truncado} fora desta lista.
           Refine o filtro: agir sobre o que você não está vendo é como isso dá errado.
         </p>
       ) : null}

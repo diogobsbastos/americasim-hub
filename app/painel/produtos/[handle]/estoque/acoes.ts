@@ -1,5 +1,12 @@
 "use server";
 
+// ATENCAO: este arquivo so pode exportar FUNCOES ASSINCRONAS.
+// Constante exportada daqui chega como `undefined` no componente de cliente, o
+// `useActionState` comeca com undefined, e a primeira leitura de
+// `estado.detalhes.length` derruba a pagina inteira em producao — sem o build
+// reclamar de nada. Os estados iniciais moram em ./tipos.ts.
+// (Foi exatamente o que aconteceu em 18/08/2026 com a tela de estoque.)
+
 import { revalidatePath } from "next/cache";
 import { cifrarCodigo, impressaoCodigo, problemaComAChave } from "../../../../../lib/cripto-esim";
 import { db } from "../../../../../lib/db";
@@ -13,6 +20,7 @@ import {
 } from "../../../../../lib/estoque";
 import { lerLote, repartirCusto } from "../../../../../lib/lote";
 import { auditar, usuarioDaSessao } from "../../../../../lib/painel/sessao";
+import type { EstadoLote, EstadoMovimento } from "./tipos";
 
 // Importacao de lote de eSIM — SPEC/02 §3 (estoque) e migracao 003 (custo real).
 //
@@ -26,17 +34,12 @@ import { auditar, usuarioDaSessao } from "../../../../../lib/painel/sessao";
 const PODE_IMPORTAR = ["admin", "operacao"];
 const PODE_MOVER = ["admin", "operacao"];
 
-export interface EstadoLote {
-  erro: string;
-  ok: string;
-  detalhes: string[];
-}
-
-export const ESTADO_LOTE_INICIAL: EstadoLote = { erro: "", ok: "", detalhes: [] };
-
 function recarregar(handle: string): void {
-  revalidatePath(`/painel/produtos/${handle}/estoque`);
-  revalidatePath(`/painel/produtos/${handle}`);
+  revalidatePath("/painel/estoque");
+  if (handle) {
+    revalidatePath(`/painel/produtos/${handle}/estoque`);
+    revalidatePath(`/painel/produtos/${handle}`);
+  }
   revalidatePath("/painel/produtos");
 }
 
@@ -234,14 +237,6 @@ export async function importarLote(
 // no extrato da linha.
 // ============================================================================
 
-export interface EstadoMovimento {
-  erro: string;
-  ok: string;
-  detalhes: string[];
-}
-
-export const ESTADO_MOVIMENTO_INICIAL: EstadoMovimento = { erro: "", ok: "", detalhes: [] };
-
 async function autorizar(): Promise<{ id: string; papel: string } | EstadoMovimento> {
   const u = await usuarioDaSessao();
   if (!u) return { erro: "Sessão expirada. Entre de novo.", ok: "", detalhes: [] };
@@ -294,7 +289,7 @@ export async function darBaixaAcao(
     return {
       erro: "",
       ok:
-        `${r.movidos} código(s) baixado(s) como "${status}".` +
+        `${r.movidos} código(s) retirado(s) como "${status}".` +
         (r.recusados.length ? ` ${r.recusados.length} recusado(s).` : ""),
       detalhes: detalharRecusas(r.recusados),
     };
