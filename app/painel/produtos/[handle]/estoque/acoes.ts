@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cifrarCodigo, impressaoCodigo, problemaComAChave } from "../../../../../lib/cripto-esim";
 import { db } from "../../../../../lib/db";
 import { lerLote, repartirCusto } from "../../../../../lib/lote";
 import { auditar, usuarioDaSessao } from "../../../../../lib/painel/sessao";
@@ -10,6 +11,9 @@ import { auditar, usuarioDaSessao } from "../../../../../lib/painel/sessao";
 // Cada codigo e uma LINHA, nunca um contador: e isso que impede dois clientes
 // receberem o mesmo eSIM. E o custo em BRL entra AQUI, no momento da compra do
 // lote, porque e o unico momento em que se sabe quanto foi pago de verdade.
+//
+// Desde a migracao 005 o codigo entra CIFRADO (AES-256-GCM, lib/cripto-esim).
+// O texto claro so existe dentro desta funcao, entre ler o formulario e gravar.
 
 const PODE_IMPORTAR = ["admin", "operacao"];
 
@@ -29,6 +33,18 @@ export async function importarLote(
   if (!u) return { erro: "Sessão expirada. Entre de novo.", ok: "", detalhes: [] };
   if (!PODE_IMPORTAR.includes(u.papel)) {
     return { erro: "Seu papel não permite importar estoque.", ok: "", detalhes: [] };
+  }
+
+  // Conferir a chave ANTES de qualquer outra coisa. Sem ela nada pode ser
+  // gravado — e o operador precisa ver o motivo em portugues, na tela, em vez
+  // de um 500 generico depois de ele ter colado 200 códigos no formulário.
+  const semChave = problemaComAChave();
+  if (semChave) {
+    return {
+      erro: "O servidor não está com a chave de cifra do eSIM configurada. Nada foi importado.",
+      ok: "",
+      detalhes: [semChave],
+    };
   }
 
   const handle = String(form.get("handle") ?? "");
@@ -111,9 +127,25 @@ export async function importarLote(
       // 2) Mas lote de operadora nem sempre vem com ICCID, e ai o UNIQUE
       //    parcial nao pega nada. Entao conferimos tambem pelo proprio codigo,
       //    que e o que de fato identifica o eSIM.
+      //
+      // A conferencia do codigo agora e pela IMPRESSAO DIGITAL, nao pelo bytea:
+      // com a cifra, o mesmo codigo gera bytea diferente a cada gravacao, e
+      // `where codigo_lpa = $1` nunca mais encontraria nada — a checagem
+      // passaria calada e o repetido entraria.
+      const impressao = impressaoCodigo(l.lpa);
+
+      // A segunda metade do OR e a ponte da transicao: enquanto houver linha
+      // legada (cifrado = false, codigo_hash nulo), so a impressao digital nao
+      // acha o repetido — a linha antiga nao tem impressao nenhuma. Sem isto,
+      // reimportar um lote antes de rodar scripts/cifrar-estoque.mjs criaria
+      // uma segunda copia do mesmo eSIM. A condicao se apaga sozinha quando
+      // nao sobrar nenhuma linha em texto claro.
       const jaExiste = await c.query(
-        "select 1 from estoque_esim where codigo_lpa = $1 limit 1",
-        [Buffer.from(l.lpa, "utf8")],
+        `select 1 from estoque_esim
+          where codigo_hash = $1
+             or (cifrado = false and codigo_lpa = $2)
+          limit 1`,
+        [impressao, Buffer.from(l.lpa, "utf8")],
       );
       if (jaExiste.rows.length > 0) {
         repetidos++;
@@ -122,13 +154,15 @@ export async function importarLote(
 
       const r = await c.query(
         `insert into estoque_esim
-           (variante_id, codigo_lpa, iccid, operadora, validade, custo_brl, custo_moeda, cambio_compra, lote)
-         values ($1, $2, $3, $4, $5::date, $6::numeric, 'BRL', $7::numeric, $8)
+           (variante_id, codigo_lpa, codigo_hash, cifrado, iccid, operadora, validade,
+            custo_brl, custo_moeda, cambio_compra, lote)
+         values ($1, $2, $3, true, $4, $5, $6::date, $7::numeric, 'BRL', $8::numeric, $9)
          on conflict (iccid) where iccid is not null do nothing
          returning id`,
         [
           varianteId,
-          Buffer.from(l.lpa, "utf8"),
+          cifrarCodigo(l.lpa),
+          impressao,
           l.iccid,
           operadora || null,
           validadeData,
@@ -145,6 +179,17 @@ export async function importarLote(
   } catch (e: any) {
     await c.query("rollback").catch(() => {});
     console.error("importarLote:", e);
+    // 23505 no indice da impressao digital significa que o indice unico do banco
+    // pegou o que a conferencia acima deixou passar — corrida entre duas
+    // importacoes simultaneas. E exatamente para isso que ele existe. Nada foi
+    // gravado, entao basta reenviar.
+    if (e?.code === "23505" && String(e?.constraint ?? "").includes("codigo_hash")) {
+      return {
+        erro: "Um destes códigos já entrou no estoque enquanto esta importação rodava. Nada foi gravado — reenvie.",
+        ok: "",
+        detalhes: [],
+      };
+    }
     return { erro: "Falha ao importar. Nada foi gravado.", ok: "", detalhes: [String(e?.message ?? "")] };
   } finally {
     c.release();

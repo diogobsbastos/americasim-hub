@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 import { autenticar, erro } from "../../../../lib/api";
+import { lerCodigo } from "../../../../lib/cripto-esim";
 import { db } from "../../../../lib/db";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +28,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return erro(400, "corpo_invalido", "email e obrigatorio no corpo.");
   }
 
+  // O bytea sai CRU daqui. O `convert_from(..., 'UTF8')` de antes so funcionava
+  // com texto claro; agora quem transforma bytes em codigo e o Node, com a
+  // chave que o servidor de banco nao tem — que e o ponto inteiro da mudanca
+  // (migracao 005 + lib/cripto-esim).
   const r = await db.query(
-    `select a.status, convert_from(e.codigo_lpa, 'UTF8') as lpa, e.iccid
+    `select a.status, e.codigo_lpa as codigo, e.cifrado, e.iccid
        from ativacao a
        join pedido p on p.id = a.pedido_id and p.canal_id = $2
        join cliente c on c.id = p.cliente_id and lower(c.email::text) = lower($3)
@@ -39,7 +44,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (r.rows.length === 0) return erro(404, "nao_encontrado", "Ativacao nao encontrada.");
 
   const a = r.rows[0];
-  const lpa: string = a.lpa ?? "";
+
+  // O left join deixa `codigo` nulo quando ainda nao ha eSIM alocado — isso e
+  // estado normal (pedido pago, entrega pendente), nao erro.
+  let lpa = "";
+  if (a.codigo) {
+    try {
+      lpa = lerCodigo(a.codigo, a.cifrado === true);
+    } catch (e) {
+      // Chave errada, registro adulterado ou versao de cifra desconhecida.
+      // Devolver 200 com o codigo vazio faria o cliente ver uma tela de sucesso
+      // sem produto e abrir chamado no atendimento sem ninguem saber por que.
+      // Melhor falhar alto: o erro fica no log com o id da ativacao.
+      console.error(`ativacoes ${id}: falha ao ler o codigo do eSIM:`, e);
+      return erro(
+        500,
+        "codigo_ilegivel",
+        "Nao foi possivel ler o codigo deste eSIM. O atendimento ja tem o registro.",
+      );
+    }
+  }
+
   const partes = lpa.split("$"); // LPA:1$<smdp>$<codigo>
 
   // QR do proprio LPA. E a mesma imagem que vai no e-mail de entrega (o bloco do
