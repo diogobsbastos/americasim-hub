@@ -1,0 +1,81 @@
+"use server";
+
+import { createHash } from "node:crypto";
+import { redirect } from "next/navigation";
+import { apiPost, basePublica } from "../lib/vitrine";
+import type { EstadoCompra, EstadoEsim } from "./tipos";
+import { ESTADO_ESIM_INICIAL } from "./tipos";
+
+// POST /v1/checkout. Em modo dev (sem STRIPE_SECRET_KEY) a API considera pago e
+// entrega na hora, entao o redirecionamento cai direto na pagina do pedido.
+export async function comprar(_anterior: EstadoCompra, form: FormData): Promise<EstadoCompra> {
+  const sku = String(form.get("sku") ?? "");
+  const email = String(form.get("email") ?? "").trim();
+  const tentativa = String(form.get("tentativa") ?? "");
+
+  if (!sku) return { erro: "Produto invalido." };
+  if (!email.includes("@")) return { erro: "Informe um e-mail valido." };
+
+  // Idempotency-Key DERIVADA (SPEC/00 3.4): tentativa desta tela + carrinho + cliente.
+  // Duplo-clique no mesmo formulario colide e devolve o MESMO pedido; recarregar a
+  // pagina gera outra tentativa e permite comprar de novo.
+  const chaveIdem = createHash("sha256")
+    .update(`${tentativa}|${sku}|${email.toLowerCase()}`)
+    .digest("hex")
+    .slice(0, 32);
+
+  const base = await basePublica();
+  const r = await apiPost(
+    "/v1/checkout",
+    {
+      itens: [{ sku, quantidade: 1 }],
+      cliente: { email },
+      url_sucesso: `${base}/pedido`,
+    },
+    { "idempotency-key": chaveIdem },
+  );
+
+  if (!r.ok) {
+    if (r.erro_codigo === "estoque_indisponivel") {
+      return { erro: "Acabou o estoque desta opcao. Escolha outra." };
+    }
+    return { erro: `${r.erro_mensagem} (${r.erro_codigo})` };
+  }
+
+  const url = String(r.dados?.pagamento?.url ?? "");
+  if (!url) return { erro: "A API nao devolveu a URL de retorno." };
+
+  redirect(url);
+}
+
+// POST /v1/ativacoes/{id} — o e-mail vai no CORPO, nunca na query string:
+// em GET ele cairia no access log do Nginx (LGPD). E o que prova que quem esta
+// pedindo o eSIM e o dono do pedido.
+export async function revelar(_anterior: EstadoEsim, form: FormData): Promise<EstadoEsim> {
+  const id = String(form.get("ativacao_id") ?? "");
+  const email = String(form.get("email") ?? "").trim();
+
+  if (!email.includes("@")) {
+    return { ...ESTADO_ESIM_INICIAL, erro: "Informe o e-mail usado na compra." };
+  }
+
+  const r = await apiPost(`/v1/ativacoes/${encodeURIComponent(id)}`, { email });
+  if (!r.ok) {
+    const msg =
+      r.erro_codigo === "nao_encontrado"
+        ? "Nao encontramos esta ativacao para esse e-mail."
+        : `${r.erro_mensagem} (${r.erro_codigo})`;
+    return { ...ESTADO_ESIM_INICIAL, erro: msg };
+  }
+
+  const d = r.dados ?? {};
+  return {
+    erro: "",
+    status: String(d.status ?? ""),
+    smdp: String(d.codigo_manual?.smdp ?? ""),
+    ativacao: String(d.codigo_manual?.ativacao ?? ""),
+    link_apple: String(d.link_apple ?? ""),
+    link_android: String(d.link_android ?? ""),
+    qr: String(d.qr_png_base64 ?? ""),
+  };
+}
