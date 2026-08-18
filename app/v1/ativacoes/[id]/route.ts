@@ -1,3 +1,4 @@
+import QRCode from "qrcode";
 import { autenticar, erro } from "../../../../lib/api";
 import { db } from "../../../../lib/db";
 
@@ -40,9 +41,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const a = r.rows[0];
   const lpa: string = a.lpa ?? "";
   const partes = lpa.split("$"); // LPA:1$<smdp>$<codigo>
+
+  // QR do proprio LPA. E a mesma imagem que vai no e-mail de entrega (o bloco do
+  // e-mail reaproveita esta geracao). Falha aqui nao derruba a resposta: o codigo
+  // manual abaixo continua sendo caminho valido de instalacao.
+  let qr: string | null = null;
+  if (lpa) {
+    try {
+      const dataUrl = await QRCode.toDataURL(lpa, { margin: 1, width: 320 });
+      qr = dataUrl.split(",")[1] ?? null;
+    } catch (e) {
+      console.error("ativacoes: falha ao gerar QR:", e);
+    }
+  }
+
   return Response.json({
     status: a.status,
-    qr_png_base64: null, // TODO: gerar QR (lib qrcode) junto com o e-mail de entrega
+    qr_png_base64: qr,
     codigo_manual: { smdp: partes[1] ?? "", ativacao: partes[2] ?? "" },
     link_apple: `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(lpa)}`,
     link_android: lpa,
