@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "../../../../lib/db";
 import { usuarioDaSessao } from "../../../../lib/painel/sessao";
 import Matriz, { type Canal, type Linha } from "./Matriz";
+import FormProduto from "./FormProduto";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ export default async function Produto({ params }: { params: Promise<{ handle: st
   const podeVitrine = papel === "admin" || papel === "operacao";
 
   const p = await db.query(
-    "select id, handle, nome, tipo::text as tipo, ativo from produto where handle = $1",
+    "select id, handle, nome, descricao, tipo::text as tipo, ativo from produto where handle = $1",
     [handle],
   );
   if (p.rows.length === 0) {
@@ -126,6 +127,7 @@ export default async function Produto({ params }: { params: Promise<{ handle: st
         <p>
           <code>{prod.handle}</code> · {prod.tipo} · {prod.ativo ? "ativo" : "inativo"} ·{" "}
           {linhas.length} variante{linhas.length === 1 ? "" : "s"} ·{" "}
+          <Link href={`/painel/produtos/${prod.handle}/estoque`}>estoque e lotes</Link> ·{" "}
           <Link href="/painel/produtos">voltar</Link>
         </p>
       </div>
@@ -158,6 +160,14 @@ export default async function Produto({ params }: { params: Promise<{ handle: st
           assim, a margem das variantes sem lote comprado é aproximada, não apurada.
         </div>
       ) : null}
+
+      <FormProduto
+        handle={prod.handle}
+        nome={prod.nome}
+        descricao={prod.descricao ?? ""}
+        ativo={prod.ativo}
+        podeEditar={podeVitrine}
+      />
 
       {canais.length === 0 ? (
         <div className="aviso">
