@@ -11,7 +11,7 @@ const AREAS = [
     itens: [
       { href: "/painel", rotulo: "Painel", pronto: true, exato: true },
       { href: "/painel/vendas", rotulo: "Vendas", pronto: true, exato: false },
-      { href: "/painel/produtos", rotulo: "Produtos", pronto: false, exato: false },
+      { href: "/painel/produtos", rotulo: "Produtos", pronto: true, exato: false },
     ],
   },
   {
