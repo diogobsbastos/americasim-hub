@@ -1,6 +1,11 @@
 import { db } from "./db";
-import { estadoCredencial, type EstadoCredencial } from "./canal-credencial";
+import {
+  estadoCredencial,
+  ESTADO_CREDENCIAL_VAZIO,
+  type EstadoCredencial,
+} from "./canal-credencial";
 import { ondeEstaOSegredo } from "./segredo-app";
+import { quando } from "./quando";
 
 // Catalogo de conectores de marketplace — a area Conexoes do painel.
 //
@@ -154,7 +159,7 @@ const ROTULO: Record<Situacao, string> = {
   sem_segredo: "Falta a senha da aplicação",
   pronto: "Pronto para conectar",
   conectado: "Conectado",
-  vencendo: "Conectado — renovando em breve",
+  vencendo: "Conectado — precisa reconectar em breve",
   vencida: "Conexão expirada",
   ilegivel: "Credencial ilegível",
 };
@@ -173,12 +178,7 @@ export async function estadoDoConector(c: Conector): Promise<EstadoConector> {
   const ondeSegredo = await ondeEstaOSegredo(c.envSecret);
   const temSegredo = ondeSegredo === "ambiente" || ondeSegredo === "banco";
 
-  const cred = canalId
-    ? await estadoCredencial(canalId)
-    : {
-        existe: false, expiraEm: null, expirada: false, expiraEmBreve: false,
-        escopos: [], atualizadaEm: null, ilegivel: false,
-      };
+  const cred = canalId ? await estadoCredencial(canalId) : { ...ESTADO_CREDENCIAL_VAZIO };
 
   let itens = { total: 0, publicados: 0, comErro: 0 };
   let ultimoSync: Date | null = null;
@@ -212,6 +212,16 @@ export async function estadoDoConector(c: Conector): Promise<EstadoConector> {
     }));
   }
 
+  // A renovacao automatica falhou DEPOIS da ultima credencial gravada? Entao o
+  // refresh token nao serve mais (revogado, ou a aplicacao mudou) e a conexao
+  // esta morta mesmo que a data de vencimento ainda nao tenha chegado. Sem esta
+  // conferencia a tela diria "conectado" ate a primeira venda perdida.
+  const renovacaoQuebrou = ultimosErros.some(
+    (e) =>
+      e.acao === "renovar" &&
+      (!cred.atualizadaEm || new Date(e.quando).getTime() > cred.atualizadaEm.getTime()),
+  );
+
   // A ordem importa: `ilegivel` vem ANTES de `conectado`, senao uma credencial
   // que nao abre apareceria como saudavel e o problema so surgiria na primeira
   // venda perdida.
@@ -221,6 +231,10 @@ export async function estadoDoConector(c: Conector): Promise<EstadoConector> {
   else if (!temSegredo) situacao = "sem_segredo";
   else if (cred.ilegivel) situacao = "ilegivel";
   else if (!cred.existe) situacao = "pronto";
+  else if (renovacaoQuebrou) situacao = "vencida";
+  // Com refresh token guardado, vencer NAO e um evento: a proxima chamada ao
+  // marketplace renova sozinha. So vira alerta quando nao ha como renovar.
+  else if (cred.temRefresh) situacao = "conectado";
   else if (cred.expirada) situacao = "vencida";
   else if (cred.expiraEmBreve) situacao = "vencendo";
   else situacao = "conectado";
@@ -247,10 +261,12 @@ function explicar(c: Conector, s: Situacao, cred: EstadoCredencial): string {
     case "ilegivel":
       return "Existe uma credencial gravada, mas ela não abre com a chave atual. Pode ter sido gravada para outro canal ou adulterada. Desconecte e conecte de novo.";
     case "vencida":
-      return "A autorização expirou e a renovação automática não aconteceu. Conecte de novo.";
+      return "A renovação automática não funcionou — o refresh token não vale mais. Conecte de novo; a causa está em “últimos erros”, logo abaixo.";
     case "vencendo":
-      return `A autorização vence ${cred.expiraEm ? "em " + new Date(cred.expiraEm).toLocaleString("pt-BR") : "em breve"} e será renovada sozinha.`;
+      return `Este acesso vence ${cred.expiraEm ? "em " + quando(cred.expiraEm) : "em breve"} e NÃO renova sozinho: a aplicação foi autorizada sem offline_access. Reconecte antes disso.`;
     default:
-      return "Tudo certo. O hub publica anúncios e recebe pedidos por este canal.";
+      return cred.temRefresh
+        ? `Tudo certo. O acesso de agora vale até ${quando(cred.expiraEm)} e o hub o renova sozinho antes de vencer.`
+        : "Tudo certo. O hub publica anúncios e recebe pedidos por este canal.";
   }
 }

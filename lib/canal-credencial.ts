@@ -18,6 +18,13 @@ import { cifrarSegredo, decifrarSegredo, mascarar } from "./cripto-segredo";
 
 const DOMINIO = "credencial-canal";
 
+// Pool ou PoolClient — os dois tem .query. A renovacao de token precisa gravar
+// DENTRO da transacao que segurou a trava da linha; se gravasse pelo pool, seria
+// outra conexao esperando uma trava que ela mesma segura, e travaria de vez.
+export interface Executor {
+  query(texto: string, valores?: unknown[]): Promise<{ rows: any[] }>;
+}
+
 export interface Credencial {
   accessToken: string;
   refreshToken: string;
@@ -29,16 +36,32 @@ export interface EstadoCredencial {
   existe: boolean;
   expiraEm: Date | null;
   expirada: boolean;
-  expiraEmBreve: boolean; // menos de 24h
+  // Perto de vencer PARA A VIDA DELE. Antes isto era "menos de 24 h", o que com
+  // o token do Mercado Livre — que nasce valendo 6 h — ficava aceso desde o
+  // segundo em que era emitido. Alerta sempre aceso nao e alerta, e ruido.
+  expiraEmBreve: boolean;
+  // Existe refresh token guardado. Quando existe, vencer nao e um evento: a
+  // proxima chamada renova sozinha. Quando NAO existe, vencer significa que
+  // alguem vai ter que reconectar na mao.
+  temRefresh: boolean;
   escopos: string[];
   atualizadaEm: Date | null;
   ilegivel: boolean; // ha linha no banco, mas nao abre com a chave atual
 }
 
-const UMA_HORA = 3600 * 1000;
+export const ESTADO_CREDENCIAL_VAZIO: EstadoCredencial = {
+  existe: false, expiraEm: null, expirada: false, expiraEmBreve: false,
+  temRefresh: false, escopos: [], atualizadaEm: null, ilegivel: false,
+};
 
-export async function salvarCredencial(canalId: string, c: Credencial): Promise<void> {
-  await db.query(
+const UM_MINUTO = 60 * 1000;
+
+export async function salvarCredencial(
+  canalId: string,
+  c: Credencial,
+  ex: Executor = db,
+): Promise<void> {
+  await ex.query(
     `insert into credencial_canal (canal_id, access_token, refresh_token, expira_em, escopos, atualizado_em)
      values ($1, $2, $3, $4, $5, now())
      on conflict (canal_id) do update
@@ -59,9 +82,17 @@ export async function salvarCredencial(canalId: string, c: Credencial): Promise<
 
 // Devolve os segredos abertos. So chamar onde eles serao REALMENTE usados —
 // numa chamada ao marketplace. Nunca para "mostrar na tela".
-export async function lerCredencial(canalId: string): Promise<Credencial | null> {
-  const r = await db.query(
-    "select access_token, refresh_token, expira_em, escopos from credencial_canal where canal_id = $1",
+//
+// `travar` liga o FOR UPDATE: exige estar dentro de uma transacao (passe o
+// PoolClient em `ex`) e serve para serializar a renovacao do token.
+export async function lerCredencial(
+  canalId: string,
+  ex: Executor = db,
+  travar = false,
+): Promise<Credencial | null> {
+  const r = await ex.query(
+    `select access_token, refresh_token, expira_em, escopos
+       from credencial_canal where canal_id = $1${travar ? " for update" : ""}`,
     [canalId],
   );
   if (r.rows.length === 0) return null;
@@ -77,15 +108,12 @@ export async function lerCredencial(canalId: string): Promise<Credencial | null>
 // O que a TELA pode saber: se existe, quando vence, se abre. Nada do segredo.
 export async function estadoCredencial(canalId: string): Promise<EstadoCredencial> {
   const r = await db.query(
-    "select access_token, expira_em, escopos, atualizado_em from credencial_canal where canal_id = $1",
+    `select access_token, (refresh_token is not null) as tem_refresh,
+            expira_em, escopos, atualizado_em
+       from credencial_canal where canal_id = $1`,
     [canalId],
   );
-  if (r.rows.length === 0) {
-    return {
-      existe: false, expiraEm: null, expirada: false, expiraEmBreve: false,
-      escopos: [], atualizadaEm: null, ilegivel: false,
-    };
-  }
+  if (r.rows.length === 0) return { ...ESTADO_CREDENCIAL_VAZIO };
   const l = r.rows[0];
 
   // Ha linha, mas nao abre: chave trocada, registro adulterado, ou credencial
@@ -99,14 +127,26 @@ export async function estadoCredencial(canalId: string): Promise<EstadoCredencia
   }
 
   const expira: Date | null = l.expira_em ?? null;
+  const nasceu: Date | null = l.atualizado_em ?? null;
   const agora = Date.now();
+
+  // A janela de alerta e proporcional a vida do proprio token, nao um numero
+  // fixo: 6 h no ML, dias em outro marketplace. Um quinto da vida, com piso de
+  // 10 min para token de vida muito curta.
+  let janela = 10 * UM_MINUTO;
+  if (expira && nasceu) {
+    const vida = expira.getTime() - nasceu.getTime();
+    if (vida > 0) janela = Math.max(janela, vida / 5);
+  }
+
   return {
     existe: true,
     expiraEm: expira,
     expirada: !!expira && expira.getTime() <= agora,
-    expiraEmBreve: !!expira && expira.getTime() > agora && expira.getTime() - agora < 24 * UMA_HORA,
+    expiraEmBreve: !!expira && expira.getTime() > agora && expira.getTime() - agora < janela,
+    temRefresh: !!l.tem_refresh,
     escopos: l.escopos ?? [],
-    atualizadaEm: l.atualizado_em ?? null,
+    atualizadaEm: nasceu,
     ilegivel,
   };
 }
