@@ -8,9 +8,13 @@ import { db } from "./db";
 // 4. outbox: UM EVENTO POR EFEITO, na MESMA transacao.
 // NUNCA colocar chamada de rede dentro deste bloco.
 
-export type ResultadoEntrega =
-  | { ok: true; jaEntregue: boolean; ativacaoId?: string }
-  | { ok: false; motivo: "sem_estoque" | "status_incompativel"; status?: string };
+export type ResultadoEntrega = {
+  ok: boolean;
+  jaEntregue?: boolean;
+  ativacaoId?: string;
+  motivo?: "sem_estoque" | "status_incompativel";
+  status?: string;
+};
 
 export async function entregarPedido(
   pedidoId: string,
@@ -63,8 +67,8 @@ export async function entregarPedido(
     );
 
     await c.query("commit");
-    // campainha, nunca transporte (SPEC/01 §4)
-    c.query("select pg_notify('evento_saida','novo')").catch(() => {});
+    // campainha, nunca transporte (SPEC/01 §4) — antes do release, de proposito
+    await c.query("select pg_notify('evento_saida','novo')").catch(() => {});
     return { ok: true, jaEntregue: false, ativacaoId: atv.rows[0].id };
   } catch (e) {
     await c.query("rollback").catch(() => {});
