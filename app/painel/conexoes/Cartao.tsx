@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { desconectar, salvarClientId } from "./acoes";
+import { apagarSegredo, desconectar, salvarClientId, salvarSegredo } from "./acoes";
 import { ESTADO_CONEXAO_INICIAL } from "./tipos";
 
 const COR: Record<string, string> = {
@@ -34,6 +34,7 @@ export default function Cartao({
   detalhe,
   clientId,
   temSegredo,
+  ondeSegredo,
   envSecret,
   urlDev,
   urlRetorno,
@@ -54,6 +55,7 @@ export default function Cartao({
   detalhe: string;
   clientId: string | null;
   temSegredo: boolean;
+  ondeSegredo?: string;
   envSecret: string;
   urlDev: string;
   urlRetorno: string;
@@ -65,6 +67,8 @@ export default function Cartao({
   expiraEm: string | null;
 }) {
   const [eId, aId, pId] = useActionState(salvarClientId, ESTADO_CONEXAO_INICIAL);
+  const [eSeg, aSeg, pSeg] = useActionState(salvarSegredo, ESTADO_CONEXAO_INICIAL);
+  const [eApg, aApg, pApg] = useActionState(apagarSegredo, ESTADO_CONEXAO_INICIAL);
   const [eDes, aDes, pDes] = useActionState(desconectar, ESTADO_CONEXAO_INICIAL);
 
   const ligado = ["conectado", "vencendo"].includes(situacao);
@@ -141,17 +145,56 @@ export default function Cartao({
             <summary style={{ cursor: "pointer", fontSize: "0.9rem", fontWeight: 600 }}>
               2. Senha da aplicação {temSegredo ? "✓" : "— falta"}
             </summary>
-            <p style={{ color: "var(--texto-fraco)", fontSize: "0.84rem", margin: "8px 0" }}>
-              A senha <b>não passa por aqui e não vai para o banco</b>. Ela entra no ambiente do
-              servidor, pelo SSH:
-            </p>
-            <code style={{ display: "block", whiteSpace: "pre-wrap", wordBreak: "break-all", padding: "8px 10px", fontSize: "0.76rem" }}>
-              {`echo '${envSecret}=cole-a-senha-aqui' >> ~/.americasim-hub.env\nsudo systemctl restart americasim-hub`}
-            </code>
-            <p style={{ color: "var(--texto-fraco)", fontSize: "0.8rem", margin: "8px 0 0" }}>
-              Depois rode <code>clear</code> para tirar da tela. Esta página só sabe se a variável
-              existe — nunca o valor.
-            </p>
+
+            {ondeSegredo === "ilegivel" ? (
+              <p style={{ color: "var(--erro)", fontSize: "0.84rem", margin: "8px 0" }}>
+                Existe uma senha guardada, mas ela não abre com a chave atual do servidor. Cole
+                de novo.
+              </p>
+            ) : null}
+
+            {ondeSegredo === "ambiente" ? (
+              <p style={{ color: "var(--texto-fraco)", fontSize: "0.84rem", margin: "8px 0" }}>
+                A senha está no arquivo de ambiente do servidor (<code>{envSecret}</code>), e é
+                ela que vale. Para trocar por aqui, remova de lá primeiro.
+              </p>
+            ) : (
+              <>
+                <p style={{ color: "var(--texto-fraco)", fontSize: "0.84rem", margin: "8px 0" }}>
+                  Copie a <b>Client Secret</b> do painel do marketplace e cole aqui. Ela é
+                  guardada <b>cifrada</b> — um backup do banco, sozinho, não abre nada. E não
+                  volta para esta tela depois de salva.
+                </p>
+                {podeMexer ? (
+                  <form action={aSeg}>
+                    <input type="hidden" name="tipo" value={tipo} />
+                    <label className="rotulo">
+                      Client Secret {temSegredo ? "(já guardada — cole de novo só para trocar)" : ""}
+                    </label>
+                    <input
+                      type="password"
+                      name="segredo"
+                      autoComplete="off"
+                      placeholder={temSegredo ? "••••••••••••" : "cole aqui"}
+                      disabled={pSeg}
+                    />
+                    <button type="submit" disabled={pSeg} style={{ marginTop: 8 }}>
+                      {pSeg ? "Guardando…" : temSegredo ? "Trocar senha" : "Guardar senha"}
+                    </button>
+                    <Recado e={eSeg} />
+                  </form>
+                ) : null}
+                {podeMexer && ondeSegredo === "banco" ? (
+                  <form action={aApg} style={{ marginTop: 8 }}>
+                    <input type="hidden" name="tipo" value={tipo} />
+                    <button type="submit" disabled={pApg} className="botao secundario" style={{ fontSize: "0.82rem" }}>
+                      {pApg ? "Apagando…" : "Apagar senha guardada"}
+                    </button>
+                    <Recado e={eApg} />
+                  </form>
+                ) : null}
+              </>
+            )}
           </details>
 
           {/* ---------------------------------------------- passo 3: autorizar */}

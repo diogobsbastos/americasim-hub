@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { estadoCredencial, type EstadoCredencial } from "./canal-credencial";
+import { ondeEstaOSegredo } from "./segredo-app";
 
 // Catalogo de conectores de marketplace — a area Conexoes do painel.
 //
@@ -18,7 +19,7 @@ export interface Conector {
   disponivel: boolean;
   porqueNao?: string;
   paramClientId: string; // chave na tabela `parametro` (valor publico)
-  envSecret: string;     // nome da variavel de ambiente (valor NUNCA no banco)
+  envSecret: string;     // nome da variavel de ambiente / do segredo cifrado
   urlDev: string;
   escopos: string[];
   autorizacaoBase?: string;
@@ -135,6 +136,9 @@ export interface EstadoConector {
   canalAtivo: boolean;
   clientId: string | null;
   temSegredo: boolean;
+  // De onde o segredo veio. A tela mostra isso porque "esta no .env" e "esta no
+  // banco" se resolvem de formas diferentes quando algo da errado.
+  ondeSegredo: "ambiente" | "banco" | "ilegivel" | "nenhum";
   cred: EstadoCredencial;
   situacao: Situacao;
   rotulo: string;
@@ -164,9 +168,10 @@ export async function estadoDoConector(c: Conector): Promise<EstadoConector> {
   const canal = canalQ.rows[0] ?? null;
   const canalId: string | null = canal?.id ?? null;
   const clientId: string | null = (paramQ.rows[0]?.valor ?? "").trim() || null;
-  // So a PRESENCA da variavel, nunca o valor. Segredo de aplicacao nao passa
+  // So SE existe e DE ONDE veio, nunca o valor. Segredo de aplicacao nao passa
   // por tela, log nem auditoria.
-  const temSegredo = !!(process.env[c.envSecret] ?? "").trim();
+  const ondeSegredo = await ondeEstaOSegredo(c.envSecret);
+  const temSegredo = ondeSegredo === "ambiente" || ondeSegredo === "banco";
 
   const cred = canalId
     ? await estadoCredencial(canalId)
@@ -224,7 +229,7 @@ export async function estadoDoConector(c: Conector): Promise<EstadoConector> {
 
   return {
     conector: c, canalId, canalCodigo: canal?.codigo ?? null, canalAtivo: !!canal?.ativo,
-    clientId, temSegredo, cred, situacao, rotulo: ROTULO[situacao], detalhe,
+    clientId, temSegredo, ondeSegredo, cred, situacao, rotulo: ROTULO[situacao], detalhe,
     itens, ultimoSync, ultimosErros,
   };
 }
@@ -236,7 +241,7 @@ function explicar(c: Conector, s: Situacao, cred: EstadoCredencial): string {
     case "sem_aplicacao":
       return `Crie a aplicação em ${c.urlDev} e cole aqui o Client ID. Ele é público — o que não pode aparecer é a senha.`;
     case "sem_segredo":
-      return `O Client ID está guardado. Falta a senha da aplicação no ambiente do servidor (${c.envSecret}), que entra pelo SSH e nunca pelo banco.`;
+      return "O Client ID está guardado. Falta a senha da aplicação — é o campo logo abaixo. Ela é guardada cifrada: um backup do banco, sozinho, não abre nada.";
     case "pronto":
       return "Aplicação configurada. Falta autorizar — é o vaivém que dá ao hub permissão de publicar e ler pedidos na sua conta.";
     case "ilegivel":
