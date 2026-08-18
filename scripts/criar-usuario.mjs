@@ -13,6 +13,11 @@ import { scryptSync, randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
 import pg from "pg";
 
+// Minimo definido pelo Contratante em 18/08. O que segura a porta aqui nao e o
+// tamanho da senha: e o Basic Auth do Nginx na frente, o limite de 8 tentativas
+// por IP em 15 min e o scrypt no hash.
+const MINIMO = 8;
+
 function hashSenha(senha) {
   const N = 16384, r = 8, p = 1;
   const salt = randomBytes(16);
@@ -56,8 +61,8 @@ if (senha !== senha2) {
   console.error("as senhas nao batem.");
   process.exit(1);
 }
-if (senha.length < 10) {
-  console.error(`senha curta demais (${senha.length}). Minimo 10.`);
+if (senha.length < MINIMO) {
+  console.error(`senha curta demais (${senha.length}). Minimo ${MINIMO}.`);
   process.exit(1);
 }
 
