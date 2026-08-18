@@ -1,10 +1,34 @@
 "use server";
 
 import { createHash } from "node:crypto";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { apiPost, basePublica } from "../lib/vitrine";
+import {
+  COOKIE_VISITA,
+  COOKIE_ULTIMO,
+  COOKIE_PRIMEIRO,
+  decodificar,
+  paraApi,
+} from "../lib/atribuicao";
 import type { EstadoCompra, EstadoEsim } from "./tipos";
 import { ESTADO_ESIM_INICIAL } from "./tipos";
+
+// Le os cookies de origem gravados pelo middleware e monta o bloco que vai no
+// corpo do checkout (migracao 004). Nunca lanca: cookie ausente ou adulterado
+// custa a atribuicao de uma venda; lancar aqui custaria a venda inteira.
+async function atribuicaoDosCookies() {
+  try {
+    const c = await cookies();
+    const visita = c.get(COOKIE_VISITA)?.value;
+    const ultimo = paraApi(decodificar(c.get(COOKIE_ULTIMO)?.value));
+    const primeiro = paraApi(decodificar(c.get(COOKIE_PRIMEIRO)?.value));
+    if (!visita && !ultimo && !primeiro) return undefined;
+    return { visita_id: visita, ultimo, primeiro };
+  } catch {
+    return undefined;
+  }
+}
 
 // POST /v1/checkout. Em modo dev (sem STRIPE_SECRET_KEY) a API considera pago e
 // entrega na hora, entao o redirecionamento cai direto na pagina do pedido.
@@ -31,6 +55,7 @@ export async function comprar(_anterior: EstadoCompra, form: FormData): Promise<
       itens: [{ sku, quantidade: 1 }],
       cliente: { email },
       url_sucesso: `${base}/pedido`,
+      atribuicao: await atribuicaoDosCookies(),
     },
     { "idempotency-key": chaveIdem },
   );

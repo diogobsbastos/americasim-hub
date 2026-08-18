@@ -4,8 +4,9 @@ import { db } from "./db";
 // 1. trava condicional (aceita 'em_provisionamento': e o reprocesso da fila);
 //    rowCount=0 tem DOIS significados — reler a linha antes de decidir.
 // 2. aloca UM codigo com FOR UPDATE SKIP LOCKED (zero linhas = ERRO ALTO).
-// 3. grava ativacao.
-// 4. outbox: UM EVENTO POR EFEITO, na MESMA transacao.
+// 3. grava o CUSTO REAL da unidade entregue (migracao 003).
+// 4. grava ativacao.
+// 5. outbox: UM EVENTO POR EFEITO, na MESMA transacao.
 // NUNCA colocar chamada de rede dentro deste bloco.
 
 export type ResultadoEntrega = {
@@ -28,7 +29,7 @@ export async function entregarPedido(
     const trava = await c.query(
       `update pedido set entregue = true, entregue_em = now(), status = 'entregue'
         where id = $1 and status in ('pago','em_provisionamento') and entregue = false
-        returning id`,
+        returning id, moeda`,
       [pedidoId],
     );
     if (trava.rows.length === 0) {
@@ -43,12 +44,36 @@ export async function entregarPedido(
         where id = (select id from estoque_esim
                      where variante_id = $2 and status = 'disponivel'
                      order by criado_em for update skip locked limit 1)
-        returning id`,
+        returning id, custo_brl`,
       [pedidoId, varianteId],
     );
     if (cod.rows.length === 0) {
       await c.query("rollback");
       return { ok: false, motivo: "sem_estoque" };
+    }
+
+    // ---- custo REAL da unidade entregue (migracao 003) ----------------------
+    // Nao e o custo medio da variante nem uma conversao feita depois: e o que
+    // ESTE codigo custou. E a unica margem que nao depende de cotacao do dia da
+    // venda. Se o lote nao tiver custo em BRL gravado, fica nulo — nulo e "nao
+    // sei", que e diferente de zero, e o relatorio precisa poder distinguir.
+    const custoUnit = cod.rows[0].custo_brl;
+    const moedaPedido = String(trava.rows[0].moeda ?? "");
+    if (custoUnit !== null && custoUnit !== undefined && moedaPedido === "BRL") {
+      await c.query(
+        "update item_pedido set custo_unit = $1 where id = $2 and custo_unit is null",
+        [custoUnit, itemPedidoId],
+      );
+      await c.query(
+        `update pedido
+            set custo_total = (select sum(custo_unit * quantidade)
+                                 from item_pedido where pedido_id = $1)
+          where id = $1`,
+        [pedidoId],
+      );
+      // margem_liquida NAO e calculada aqui de proposito: ela e
+      // preco - custo - taxa do provedor - IOF, e taxa e IOF so existem depois
+      // da liquidacao (SPEC/04 §7). Escrever margem agora seria inventar numero.
     }
 
     const atv = await c.query(

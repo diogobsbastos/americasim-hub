@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { autenticar, erro } from "../../../lib/api";
 import { db } from "../../../lib/db";
 import { novoNumeroPedido } from "../../../lib/numero";
@@ -5,6 +6,83 @@ import { assinarAcompanhamento } from "../../../lib/token";
 import { entregarPedido } from "../../../lib/entrega";
 
 export const dynamic = "force-dynamic";
+
+// Campos de atribuicao aceitos no corpo (migracao 004). Lista fechada de
+// proposito: campo desconhecido vindo do cliente nao entra no banco.
+const CAMPOS_ATRIBUICAO = [
+  "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+  "gclid", "fbclid", "msclkid", "ttclid", "referer", "pagina_entrada",
+] as const;
+
+function texto(v: unknown, max: number): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  return s ? s.slice(0, max) : null;
+}
+
+function ipHash(req: Request): string | null {
+  const ff = req.headers.get("x-forwarded-for") ?? "";
+  const ip = ff.split(",")[0].trim() || req.headers.get("x-real-ip") || "";
+  if (!ip) return null;
+  // Hash, nunca o IP cru: IP e dado pessoal (LGPD, SPEC/11). O sal impede
+  // reconstruir o IP por forca bruta — a faixa de IPv4 e pequena o bastante
+  // para um hash sem sal ser reversivel em minutos.
+  return createHash("sha256").update(ip + (process.env.SAL_ATRIBUICAO ?? "")).digest("hex");
+}
+
+// Grava UM toque e devolve o id. Devolve null quando nao ha nada que valha
+// gravar — linha de atribuicao vazia so polui o relatorio.
+async function gravarToque(
+  toque: unknown,
+  visitaId: string | null,
+  canalId: string,
+  req: Request,
+): Promise<string | null> {
+  if (!toque || typeof toque !== "object") return null;
+  const t = toque as Record<string, unknown>;
+
+  const valores: Record<string, string | null> = {};
+  let temAlgo = false;
+  for (const c of CAMPOS_ATRIBUICAO) {
+    const v = texto(t[c], c === "referer" || c === "pagina_entrada" ? 500 : 200);
+    valores[c] = v;
+    if (v && c !== "pagina_entrada") temAlgo = true;
+  }
+  // `pagina_entrada` sozinha nao e origem: toda visita tem uma.
+  if (!temAlgo) return null;
+
+  let tocadoEm: string | null = null;
+  if (typeof t.tocado_em === "string") {
+    const d = new Date(t.tocado_em);
+    // Data do cliente nao merece confianca cega: futuro ou pre-historia viram
+    // nulo e o banco usa o now() do default.
+    const agora = Date.now();
+    if (!Number.isNaN(d.getTime()) && d.getTime() <= agora + 60_000 &&
+        d.getTime() > agora - 400 * 86400_000) {
+      tocadoEm = d.toISOString();
+    }
+  }
+
+  const r = await db.query(
+    `insert into atribuicao
+       (visita_id, canal_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term,
+        gclid, fbclid, msclkid, ttclid, referer, pagina_entrada, user_agent, ip_hash, tocado_em)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, coalesce($16::timestamptz, now()))
+     returning id`,
+    [
+      texto(visitaId, 100) ?? "desconhecida",
+      canalId,
+      valores.utm_source, valores.utm_medium, valores.utm_campaign,
+      valores.utm_content, valores.utm_term,
+      valores.gclid, valores.fbclid, valores.msclkid, valores.ttclid,
+      valores.referer, valores.pagina_entrada,
+      texto(req.headers.get("user-agent"), 300),
+      ipHash(req),
+      tocadoEm,
+    ],
+  );
+  return r.rows[0].id as string;
+}
 
 // POST /v1/checkout — SPEC/03. Gateway plugavel:
 // - COM STRIPE_SECRET_KEY no ambiente: cria sessao Stripe (proximo bloco).
@@ -57,19 +135,38 @@ export async function POST(req: Request) {
     if (v.rows.length === 0) return erro(404, "nao_encontrado", "SKU inexistente neste canal.");
     const va = v.rows[0];
 
+    // ---- atribuicao (migracao 004) -----------------------------------------
+    // Nunca derruba a compra: origem perdida e ruim, venda perdida e pior.
+    const atrib = corpo?.atribuicao ?? {};
+    const visitaId = typeof atrib?.visita_id === "string" ? atrib.visita_id : null;
+    let idPrimeiro: string | null = null;
+    let idUltimo: string | null = null;
+    try {
+      idPrimeiro = await gravarToque(atrib?.primeiro ?? atrib?.ultimo, visitaId, canal.id, req);
+      idUltimo = await gravarToque(atrib?.ultimo, visitaId, canal.id, req);
+      // So um toque conhecido: ele e primeiro e ultimo ao mesmo tempo.
+      if (!idUltimo) idUltimo = idPrimeiro;
+      if (!idPrimeiro) idPrimeiro = idUltimo;
+    } catch (e) {
+      console.error("atribuicao:", e);
+    }
+
     const cli = await db.query(
-      `insert into cliente (email, nome, telefone) values ($1, $2, $3)
+      `insert into cliente (email, nome, telefone, atribuicao_primeira_id)
+       values ($1, $2, $3, $4)
        on conflict (email) where email is not null
-       do update set nome = coalesce(excluded.nome, cliente.nome)
+       do update set nome = coalesce(excluded.nome, cliente.nome),
+                     atribuicao_primeira_id = coalesce(cliente.atribuicao_primeira_id,
+                                                       excluded.atribuicao_primeira_id)
        returning id`,
-      [email, corpo?.cliente?.nome ?? null, corpo?.cliente?.telefone ?? null],
+      [email, corpo?.cliente?.nome ?? null, corpo?.cliente?.telefone ?? null, idPrimeiro],
     );
 
     const numero = novoNumeroPedido();
     const ped = await db.query(
-      `insert into pedido (numero, canal_id, cliente_id, status, total, moeda)
-       values ($1, $2, $3, 'aguardando_pagamento', $4, $5) returning id`,
-      [numero, canal.id, cli.rows[0].id, va.valor, va.moeda],
+      `insert into pedido (numero, canal_id, cliente_id, status, total, moeda, atribuicao_id)
+       values ($1, $2, $3, 'aguardando_pagamento', $4, $5, $6) returning id`,
+      [numero, canal.id, cli.rows[0].id, va.valor, va.moeda, idUltimo],
     );
     const item = await db.query(
       `insert into item_pedido (pedido_id, variante_id, quantidade, preco_unit, moeda)
