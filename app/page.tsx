@@ -19,6 +19,7 @@ interface Variante {
   preco: string;
   moeda: string;
   disponivel: boolean;
+  quantidade: number;
   destaque: boolean;
 }
 
@@ -32,6 +33,15 @@ interface Produto {
 function bandeiras(cobertura: unknown): string {
   if (!Array.isArray(cobertura)) return "";
   return cobertura.map((c) => String(c)).join(" · ");
+}
+
+// O numero de codigos livres AGORA. As duas vitrines leem o mesmo estoque, entao
+// uma venda numa derruba este numero na outra na recarga seguinte — a pagina e
+// `force-dynamic` e a chamada da API e `no-store`, sem cache no meio.
+function textoEstoque(v: Variante): string {
+  const q = Number(v.quantidade ?? 0);
+  if (!v.disponivel || q <= 0) return "Esgotado";
+  return q === 1 ? "1 disponivel agora" : `${q} disponiveis agora`;
 }
 
 export default async function Loja() {
@@ -114,7 +124,7 @@ export default async function Loja() {
                 <p className="preco">{formatarDinheiro(v.preco, v.moeda)}</p>
 
                 <p className={v.disponivel ? "estoque sim" : "estoque nao"}>
-                  {v.disponivel ? "Disponivel agora" : "Esgotado"}
+                  {textoEstoque(v)}
                 </p>
 
                 {/* O rotulo do botao vem da MARCA: a AmericaSim vende impulso

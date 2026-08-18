@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { apiGet, chaveConfigurada } from "../../lib/vitrine";
+import { marcaAtual } from "../../lib/marcas";
 import FormAtivacao from "./FormAtivacao";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Seu pedido — AmericaSim",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata() {
+  const m = await marcaAtual();
+  return {
+    title: `Seu pedido — ${m.nome}`,
+    robots: { index: false, follow: false },
+  };
+}
 
 interface Ativacao {
   id: string;
@@ -22,8 +26,14 @@ export default async function Pedido({
   const sp = await searchParams;
   const numero = sp.pedido ?? "";
   const token = sp.t ?? "";
+  const marca = await marcaAtual();
 
-  if (!chaveConfigurada()) {
+  // O `await` aqui NAO e detalhe de estilo. `chaveConfigurada()` virou async
+  // quando a chave passou a ser um mapa por dominio; sem o await, o `if` recebe
+  // uma Promise, que e SEMPRE truthy, entao `!promise` e sempre falso e o guarda
+  // nunca dispara. O tsc nao reclama disso — e o tipo de defeito que so aparece
+  // no dia em que o guarda precisava ter funcionado.
+  if (!(await chaveConfigurada())) {
     return (
       <main className="wrap">
         <div className="aviso">
@@ -78,7 +88,10 @@ export default async function Pedido({
       <header className="topo">
         <div className="marca">
           <span className="ponto" aria-hidden="true" />
-          AmericaSim
+          {/* Quem comprou na ViagemSim nao pode cair numa tela escrita
+              AmericaSim: seria a primeira coisa a fazer o cliente achar que
+              caiu num golpe, justamente na pagina onde ele espera o produto. */}
+          {marca.nome}
         </div>
       </header>
 
