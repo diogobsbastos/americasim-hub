@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { apagarSegredo, desconectar, salvarClientId, salvarSegredo } from "./acoes";
 import { ESTADO_CONEXAO_INICIAL } from "./tipos";
+import { quando } from "../../../lib/quando";
 
 const COR: Record<string, string> = {
   indisponivel: "var(--texto-fraco)",
@@ -212,13 +213,8 @@ export default function Cartao({
                     <span style={{ color: "var(--erro)" }}> · {itens.comErro} com erro</span>
                   ) : null}
                 </div>
-                <div>
-                  Última sincronia:{" "}
-                  {ultimoSync ? new Date(ultimoSync).toLocaleString("pt-BR") : "ainda não houve"}
-                </div>
-                {expiraEm ? (
-                  <div>Autorização vale até {new Date(expiraEm).toLocaleString("pt-BR")}</div>
-                ) : null}
+                <div>Última sincronia: {ultimoSync ? quando(ultimoSync) : "ainda não houve"}</div>
+                {expiraEm ? <div>Acesso de agora vale até {quando(expiraEm)}</div> : null}
               </div>
             ) : null}
 
@@ -257,7 +253,7 @@ export default function Cartao({
               <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: "0.8rem", color: "var(--texto-fraco)" }}>
                 {ultimosErros.map((e, i) => (
                   <li key={i}>
-                    <b>{new Date(e.quando).toLocaleString("pt-BR")}</b> · {e.acao} — {e.detalhe}
+                    <b>{quando(e.quando)}</b> · {e.acao} — {e.detalhe}
                   </li>
                 ))}
               </ul>

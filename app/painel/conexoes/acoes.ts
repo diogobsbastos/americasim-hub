@@ -6,9 +6,11 @@ import { revalidatePath } from "next/cache";
 import { apagarCredencial } from "../../../lib/canal-credencial";
 import { conectorPorTipo } from "../../../lib/conectores";
 import { db } from "../../../lib/db";
+import { ErroMl } from "../../../lib/mercadolivre";
 import { apagarSegredoApp, salvarSegredoApp } from "../../../lib/segredo-app";
+import { novoUsuarioTeste, senhaDoUsuarioTeste } from "../../../lib/usuario-teste";
 import { auditar, usuarioDaSessao } from "../../../lib/painel/sessao";
-import type { EstadoConexao } from "./tipos";
+import type { EstadoConexao, EstadoUsuarioTeste } from "./tipos";
 
 const PODE_MEXER = ["admin"];
 
@@ -179,4 +181,86 @@ export async function apagarSegredo(
   revalidatePath("/painel/conexoes");
   revalidatePath(`/painel/conexoes/${c.tipo}`);
   return { erro: "", ok: "Senha apagada." };
+}
+
+// --------------------------------------------------------- usuarios de teste
+
+const VAZIO_TESTE: EstadoUsuarioTeste = {
+  erro: "", ok: "", criado: null, senhaDe: "", senha: "",
+};
+
+async function canalDe(tipo: string): Promise<{ canalId: string } | { erro: string }> {
+  const c = conectorPorTipo(tipo);
+  if (!c) return { erro: "Conector desconhecido." };
+  const q = await db.query("select id from canal where tipo = $1::tipo_canal limit 1", [c.tipo]);
+  const canalId = q.rows[0]?.id;
+  if (!canalId) return { erro: "Este canal ainda não existe. Guarde o Client ID primeiro." };
+  return { canalId };
+}
+
+export async function criarUsuarioTesteAcao(
+  _anterior: EstadoUsuarioTeste,
+  form: FormData,
+): Promise<EstadoUsuarioTeste> {
+  const u = await autorizar();
+  if ("erro" in u) return { ...VAZIO_TESTE, erro: u.erro };
+
+  const tipo = String(form.get("tipo") ?? "");
+  const alvo = await canalDe(tipo);
+  if ("erro" in alvo) return { ...VAZIO_TESTE, erro: alvo.erro };
+
+  let novo;
+  try {
+    // Este e o caminho que passa por mlFetch -> tokenDoCanal -> renovar. Se a
+    // autorizacao estiver vencida, ela se renova aqui, sozinha, e o operador
+    // nem fica sabendo.
+    novo = await novoUsuarioTeste(alvo.canalId);
+  } catch (e: any) {
+    console.error("criarUsuarioTeste:", e);
+    const msg = String(e?.message ?? e);
+    if (e instanceof ErroMl && e.precisaReconectar) {
+      return { ...VAZIO_TESTE, erro: `${msg} — clique em Reconectar acima.` };
+    }
+    return { ...VAZIO_TESTE, erro: `O Mercado Livre recusou: ${msg}` };
+  }
+
+  // A auditoria guarda QUEM criou e QUAL usuario. Nunca a senha.
+  await auditar("conexao.usuario_teste", {
+    usuarioId: u.id, entidade: "canal", entidadeId: alvo.canalId,
+    depois: { conector: tipo, usuario_teste: novo.id, apelido: novo.apelido },
+  });
+  revalidatePath(`/painel/conexoes/${tipo}`);
+  return {
+    ...VAZIO_TESTE,
+    ok: "Usuário de teste criado.",
+    criado: { id: novo.id, apelido: novo.apelido, email: novo.email, senha: novo.senha },
+  };
+}
+
+export async function verSenhaTesteAcao(
+  _anterior: EstadoUsuarioTeste,
+  form: FormData,
+): Promise<EstadoUsuarioTeste> {
+  const u = await autorizar();
+  if ("erro" in u) return { ...VAZIO_TESTE, erro: u.erro };
+
+  const tipo = String(form.get("tipo") ?? "");
+  const id = String(form.get("id") ?? "").trim();
+  const alvo = await canalDe(tipo);
+  if ("erro" in alvo) return { ...VAZIO_TESTE, erro: alvo.erro };
+
+  const senha = await senhaDoUsuarioTeste(alvo.canalId, id);
+  if (!senha) {
+    return {
+      ...VAZIO_TESTE,
+      erro: "Não consigo abrir a senha guardada deste usuário. O Mercado Livre não a mostra de novo — crie outro usuário de teste.",
+    };
+  }
+
+  // Ver senha e um acesso a segredo. Fica registrado quem viu e de quem.
+  await auditar("conexao.usuario_teste.senha", {
+    usuarioId: u.id, entidade: "canal", entidadeId: alvo.canalId,
+    depois: { conector: tipo, usuario_teste: id },
+  });
+  return { ...VAZIO_TESTE, senhaDe: id, senha };
 }

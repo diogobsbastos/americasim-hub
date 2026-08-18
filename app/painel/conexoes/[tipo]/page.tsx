@@ -4,8 +4,11 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { conectorPorTipo, estadoDoConector } from "../../../../lib/conectores";
 import { db } from "../../../../lib/db";
+import { quando } from "../../../../lib/quando";
+import { listarUsuariosTeste } from "../../../../lib/usuario-teste";
 import { usuarioDaSessao } from "../../../../lib/painel/sessao";
 import Cartao from "../Cartao";
+import UsuariosTeste from "../UsuariosTeste";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +75,13 @@ export default async function ConectorDetalhe({
     const q = await db.query("select config from canal where id = $1", [e.canalId]);
     conta = q.rows[0]?.config ?? null;
   }
+  // `config` nasce `{}` quando o Client ID e guardado, antes de existir conta
+  // nenhuma. Sem esta conferencia o cartao "Conta conectada" aparecia vazio.
+  const temConta = !!conta?.usuario_marketplace || !!conta?.apelido;
+
+  const ligado = ["conectado", "vencendo"].includes(e.situacao);
+  const usuariosTeste =
+    c.tipo === "mercadolivre" && e.canalId && ligado ? await listarUsuariosTeste(e.canalId) : [];
 
   const cfg = c.configuracao;
 
@@ -139,7 +149,7 @@ export default async function ConectorDetalhe({
             </div>
           ) : null}
 
-          {conta ? (
+          {temConta ? (
             <div className="cartao">
               <h2 style={{ margin: "0 0 8px", fontSize: "1rem" }}>Conta conectada</h2>
               <div style={{ fontSize: "0.86rem", color: "var(--texto-fraco)" }}>
@@ -160,6 +170,10 @@ export default async function ConectorDetalhe({
                 ) : null}
               </div>
             </div>
+          ) : null}
+
+          {c.tipo === "mercadolivre" && ligado ? (
+            <UsuariosTeste tipo={c.tipo} usuarios={usuariosTeste} podeMexer={!!podeMexer} />
           ) : null}
         </div>
 
@@ -291,7 +305,7 @@ export default async function ConectorDetalhe({
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: "0.82rem", color: "var(--texto-fraco)" }}>
                 {e.ultimosErros.map((x, i) => (
                   <li key={i}>
-                    <b>{new Date(x.quando).toLocaleString("pt-BR")}</b> · {x.acao} — {x.detalhe}
+                    <b>{quando(x.quando)}</b> · {x.acao} — {x.detalhe}
                   </li>
                 ))}
               </ul>

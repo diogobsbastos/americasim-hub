@@ -11,3 +11,18 @@ export interface EstadoConexao {
 }
 
 export const ESTADO_CONEXAO_INICIAL: EstadoConexao = { erro: "", ok: "" };
+
+export interface EstadoUsuarioTeste {
+  erro: string;
+  ok: string;
+  // A senha aparece UMA vez, logo depois de criar. Depois so pelo botao "ver
+  // senha" — que e outra acao, no servidor, e nao um campo escondido no HTML.
+  criado: { id: string; apelido: string; email: string; senha: string } | null;
+  // Qual usuario teve a senha revelada agora, e qual e.
+  senhaDe: string;
+  senha: string;
+}
+
+export const ESTADO_USUARIO_TESTE_INICIAL: EstadoUsuarioTeste = {
+  erro: "", ok: "", criado: null, senhaDe: "", senha: "",
+};
