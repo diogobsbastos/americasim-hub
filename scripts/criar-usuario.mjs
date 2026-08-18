@@ -22,14 +22,14 @@ import pg from "pg";
 const MINIMO = 8;
 const PAPEIS = ["admin", "operacao", "atendimento", "leitura"];
 
-// Teclas de controle por nome. Escape textual, nunca o byte cru: byte invisivel
-// no fonte nao sobrevive a copiar-colar nem a editor que normaliza, e deixa a
-// comparacao ilegivel no diff.
-const ESC = "";        // inicio de sequencia de seta/Home/Delete
-const CTRL_C = "";
-const CTRL_D = "";
-const CTRL_U = "";     // limpa a linha
-const BACKSPACE = "";  // o terminal manda DEL, nao \b
+// Teclas de controle por NOME e por codigo numerico. Nada de byte de controle
+// literal dentro das aspas: byte invisivel no fonte nao sobrevive a copiar-colar
+// nem a editor que normaliza, e deixa `if (ch === "")` ilegivel no diff.
+const ESC = String.fromCharCode(27);        // abre sequencia de seta/Home/Delete
+const CTRL_C = String.fromCharCode(3);
+const CTRL_D = String.fromCharCode(4);
+const CTRL_U = String.fromCharCode(21);     // limpa a linha
+const BACKSPACE = String.fromCharCode(127); // o terminal manda DEL, nao \b
 
 // ---------------------------------------------------------------- 1. senha
 
