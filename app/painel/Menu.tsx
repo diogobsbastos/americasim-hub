@@ -24,7 +24,7 @@ const AREAS = [
   {
     grupo: "Canais",
     itens: [
-      { href: "/painel/conexoes", rotulo: "Conexões", pronto: false, exato: false },
+      { href: "/painel/conexoes", rotulo: "Conexões", pronto: true, exato: false },
       { href: "/painel/apis", rotulo: "APIs", pronto: false, exato: false },
     ],
   },
