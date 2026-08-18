@@ -1,0 +1,351 @@
+/* Tokens de tema — nenhuma cor fixa nos componentes. Claro e escuro saem daqui. */
+:root {
+  --fundo: #f6f7f9;
+  --superficie: #ffffff;
+  --superficie-2: #f0f2f5;
+  --borda: #dfe3e8;
+  --texto: #10151c;
+  --texto-fraco: #5b6672;
+  --marca: #0b6bcb;
+  --marca-forte: #0a5aad;
+  --marca-contraste: #ffffff;
+  --ok: #0e7a4d;
+  --alerta: #8a5b00;
+  --erro: #b3261e;
+  --sombra: 0 1px 2px rgba(16, 21, 28, 0.06), 0 8px 24px rgba(16, 21, 28, 0.06);
+  --raio: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #0d1117;
+    --superficie: #161b22;
+    --superficie-2: #1c232c;
+    --borda: #2a323c;
+    --texto: #e7edf3;
+    --texto-fraco: #9aa7b4;
+    --marca: #5aa9ff;
+    --marca-forte: #7cbcff;
+    --marca-contraste: #0d1117;
+    --ok: #4ec98a;
+    --alerta: #e3b341;
+    --erro: #ff7b72;
+    --sombra: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+a {
+  color: var(--marca);
+}
+
+.wrap {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+.topo {
+  padding: 8px 0 24px;
+}
+
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+.ponto {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--marca);
+  display: inline-block;
+}
+
+.chamada {
+  margin: 10px 0 0;
+  color: var(--texto-fraco);
+  font-size: 1.05rem;
+}
+
+.faixa {
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+  border-left: 4px solid var(--alerta);
+  border-radius: var(--raio);
+  padding: 12px 16px;
+  margin: 0 0 24px;
+  color: var(--texto-fraco);
+  font-size: 0.94rem;
+}
+
+.faixa strong {
+  color: var(--texto);
+}
+
+.produto h1 {
+  font-size: 1.7rem;
+  margin: 8px 0 6px;
+  letter-spacing: -0.01em;
+}
+
+.sub {
+  color: var(--texto-fraco);
+  margin: 0 0 24px;
+}
+
+.grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.plano {
+  position: relative;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 20px;
+  box-shadow: var(--sombra);
+  display: flex;
+  flex-direction: column;
+}
+
+.plano.destaque {
+  border-color: var(--marca);
+}
+
+.selo {
+  position: absolute;
+  top: -10px;
+  left: 16px;
+  background: var(--marca);
+  color: var(--marca-contraste);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.volume {
+  font-size: 1.25rem;
+}
+
+.volume strong {
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+}
+
+.volume span {
+  color: var(--texto-fraco);
+}
+
+.cobertura {
+  color: var(--texto-fraco);
+  font-size: 0.85rem;
+  margin: 6px 0 0;
+}
+
+.preco {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 14px 0 4px;
+  letter-spacing: -0.02em;
+}
+
+.estoque {
+  font-size: 0.85rem;
+  margin: 0 0 14px;
+}
+
+.estoque.sim {
+  color: var(--ok);
+}
+
+.estoque.nao {
+  color: var(--texto-fraco);
+}
+
+.compra {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.rotulo {
+  font-size: 0.8rem;
+  color: var(--texto-fraco);
+}
+
+input[type="email"] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  background: var(--superficie-2);
+  color: var(--texto);
+  font: inherit;
+}
+
+input[type="email"]:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--marca);
+  outline-offset: 2px;
+}
+
+button {
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--marca);
+  color: var(--marca-contraste);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--marca-forte);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.erro {
+  color: var(--erro);
+  font-size: 0.85rem;
+  margin: 2px 0 0;
+}
+
+.sku {
+  color: var(--texto-fraco);
+  font-size: 0.72rem;
+  margin: 12px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.aviso {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 28px;
+  box-shadow: var(--sombra);
+}
+
+.aviso h1 {
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+}
+
+.pedido-meta {
+  margin: 16px 0 24px;
+}
+
+.linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--borda);
+}
+
+.linha span {
+  color: var(--texto-fraco);
+  font-size: 0.9rem;
+}
+
+.linha code {
+  word-break: break-all;
+  text-align: right;
+}
+
+.esim {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 24px;
+  box-shadow: var(--sombra);
+  margin-top: 8px;
+}
+
+.qr {
+  display: block;
+  margin: 0 auto 20px;
+  background: #ffffff;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  max-width: 100%;
+  height: auto;
+}
+
+.botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 0 0;
+}
+
+.botao {
+  display: inline-block;
+  padding: 11px 16px;
+  border-radius: 10px;
+  background: var(--marca);
+  color: var(--marca-contraste);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.botao.secundario {
+  background: var(--superficie-2);
+  color: var(--texto);
+  border: 1px solid var(--borda);
+}
+
+.nota {
+  color: var(--texto-fraco);
+  font-size: 0.88rem;
+  margin: 16px 0 0;
+}
+
+.rodape {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--borda);
+  color: var(--texto-fraco);
+  font-size: 0.8rem;
+}
