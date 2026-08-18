@@ -76,12 +76,36 @@ export async function GET(req: Request, ctx: { params: Promise<{ tipo: string }>
     return volta("rede");
   }
 
+  // Quem e a conta do outro lado. Vale a viagem: alem de aparecer na tela, e a
+  // primeira PROVA de que o token recem-obtido funciona de verdade — melhor
+  // descobrir isso agora do que na primeira tentativa de publicar.
+  let conta: any = {};
+  try {
+    const me = await fetch("https://api.mercadolibre.com/users/me", {
+      headers: { authorization: `Bearer ${dados.access_token}` },
+      cache: "no-store",
+    });
+    if (me.ok) {
+      const j: any = await me.json();
+      conta = {
+        usuario_marketplace: j?.id ?? dados.user_id ?? null,
+        apelido: j?.nickname ?? null,
+        site: j?.site_id ?? null,
+        // O ML marca a conta de teste no proprio cadastro. Mostrar isso evita a
+        // confusao de achar que se esta publicando na loja de verdade.
+        teste: String(j?.nickname ?? "").startsWith("TET") || j?.status?.site_status === "test",
+      };
+    }
+  } catch {
+    conta = { usuario_marketplace: dados.user_id ?? null };
+  }
+
   const canalQ = await db.query(
-    `insert into canal (codigo, nome, tipo, moeda, ativo)
-     values ($1, $2, $3::tipo_canal, 'BRL', true)
-     on conflict (codigo) do update set ativo = true
+    `insert into canal (codigo, nome, tipo, moeda, ativo, config)
+     values ($1, $2, $3::tipo_canal, 'BRL', true, $4::jsonb)
+     on conflict (codigo) do update set ativo = true, config = excluded.config
      returning id`,
-    [c.tipo, c.nome, c.tipo],
+    [c.tipo, c.nome, c.tipo, JSON.stringify(conta)],
   );
   const canalId = canalQ.rows[0].id;
 
@@ -104,7 +128,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ tipo: string }>
     usuarioId: u.id, entidade: "canal", entidadeId: canalId,
     depois: {
       conector: c.tipo,
-      usuario_marketplace: dados.user_id ?? null,
+      usuario_marketplace: conta.usuario_marketplace ?? dados.user_id ?? null,
+      apelido: conta.apelido ?? null,
       escopos: String(dados.scope ?? ""),
       expira_em: expiraEm?.toISOString() ?? null,
       tem_refresh: !!dados.refresh_token,

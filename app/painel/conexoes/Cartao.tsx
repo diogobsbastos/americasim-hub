@@ -25,6 +25,7 @@ function Recado({ e }: { e: { erro: string; ok: string } }) {
 }
 
 export default function Cartao({
+  detalhado = false,
   tipo,
   nome,
   resumo,
@@ -43,6 +44,8 @@ export default function Cartao({
   ultimosErros,
   expiraEm,
 }: {
+  // Na pagina do proprio conector nao faz sentido um link para ela mesma.
+  detalhado?: boolean;
   tipo: string;
   nome: string;
   resumo: string;
@@ -85,6 +88,12 @@ export default function Cartao({
 
       <p style={{ margin: 0, color: "var(--texto-fraco)", fontSize: "0.88rem" }}>{resumo}</p>
       <p style={{ margin: 0, fontSize: "0.88rem" }}>{detalhe}</p>
+
+      {!detalhado ? (
+        <p style={{ margin: 0, fontSize: "0.88rem" }}>
+          <a href={`/painel/conexoes/${tipo}`}>Abrir configuração de {nome} →</a>
+        </p>
+      ) : null}
 
       {situacao === "indisponivel" ? null : (
         <>

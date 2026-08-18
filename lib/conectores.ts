@@ -22,6 +22,20 @@ export interface Conector {
   urlDev: string;
   escopos: string[];
   autorizacaoBase?: string;
+  // Onde o operador edita a aplicacao depois de criada.
+  urlPainel?: string;
+  // O que precisa estar marcado no painel do marketplace. Fica AQUI, como dado,
+  // e nao numa conversa: quem for conferir daqui a seis meses nao vai ter o
+  // chat, vai ter a tela.
+  configuracao?: ConfiguracaoExigida;
+}
+
+export interface ConfiguracaoExigida {
+  fluxos: { nome: string; ligar: boolean; porque: string }[];
+  pkce: { ligar: boolean; porque: string };
+  negocios: { nome: string; ligar: boolean }[];
+  permissoes: { nome: string; nivel: string; porque: string; essencial: boolean }[];
+  topicos: { nome: string; ligar: boolean; quando: string; porque: string }[];
 }
 
 export const CONECTORES: Conector[] = [
@@ -41,6 +55,45 @@ export const CONECTORES: Conector[] = [
     // morre em 6 horas e alguem precisa reconectar na mao, todo dia.
     escopos: ["offline_access", "read", "write"],
     autorizacaoBase: "https://auth.mercadolivre.com.br/authorization",
+    urlPainel: "https://developers.mercadolivre.com.br/devcenter",
+    configuracao: {
+      fluxos: [
+        { nome: "Authorization Code", ligar: true, porque: "E o vaivem que usamos para autorizar." },
+        {
+          nome: "Refresh Token",
+          ligar: true,
+          porque:
+            "Sem ele o acesso morre em 6 horas e alguem precisa reconectar na mao todo dia.",
+        },
+        { nome: "Client Credentials", ligar: true, porque: "Nao usamos, mas marcado nao atrapalha." },
+      ],
+      pkce: {
+        ligar: false,
+        porque:
+          "Se ligar, o ML passa a exigir um parametro extra (code_verifier) que este codigo nao envia — e a autorizacao falha na volta com uma mensagem que nao explica nada.",
+      },
+      negocios: [
+        { nome: "Mercado Livre", ligar: true },
+        { nome: "VIS", ligar: false },
+      ],
+      permissoes: [
+        { nome: "Usuarios", nivel: "Leitura e escrita", porque: "E como o hub sabe de qual conta ele fala.", essencial: true },
+        { nome: "Publicacao e sincronizacao", nivel: "Leitura e escrita", porque: "Criar, atualizar e pausar anuncio. Sem isso nao existe integracao.", essencial: true },
+        { nome: "Venda e envios de um produto", nivel: "Leitura e escrita", porque: "Ler o pedido pago e o que dispara a entrega do eSIM.", essencial: true },
+        { nome: "Comunicacoes pre e pos-vendas", nivel: "Leitura", porque: "Ver pergunta de comprador. Escrita nao: o hub nao responde ninguem sozinho.", essencial: false },
+        { nome: "Metricas do negocio", nivel: "Leitura", porque: "Alimenta a tabela metrica_canal.", essencial: false },
+        { nome: "Publicidade de um produto", nivel: "Sem acesso", porque: "Nao criamos campanha.", essencial: false },
+        { nome: "Faturamento de uma venda", nivel: "Sem acesso", porque: "Nota fiscal depende de CNPJ, que ainda nao temos.", essencial: false },
+        { nome: "Promocoes, cupons e descontos", nivel: "Sem acesso", porque: "Nao usamos.", essencial: false },
+      ],
+      topicos: [
+        { nome: "Orders_v2", ligar: false, quando: "quando o receptor de avisos existir", porque: "Pedido pago — e o que dispara a entrega." },
+        { nome: "Items", ligar: false, quando: "quando o receptor de avisos existir", porque: "Alguem pausou ou alterou o anuncio por fora do hub." },
+        { nome: "Questions", ligar: false, quando: "depois", porque: "Pergunta de comprador no anuncio." },
+        { nome: "Items Prices", ligar: false, quando: "depois", porque: "Preco mudou por fora do hub." },
+        { nome: "Orders Feedback / Quotations / Stock-Locations / User Products Families", ligar: false, quando: "nunca", porque: "Nao se aplicam a eSIM." },
+      ],
+    },
   },
   {
     tipo: "amazon",
@@ -56,6 +109,7 @@ export const CONECTORES: Conector[] = [
     paramClientId: "amazon.client_id",
     envSecret: "AMAZON_CLIENT_SECRET",
     urlDev: "https://sellercentral.amazon.com.br/",
+    urlPainel: "https://sellercentral.amazon.com.br/",
     escopos: [],
   },
 ];
