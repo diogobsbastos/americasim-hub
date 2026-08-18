@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { apiGet, chaveConfigurada, formatarDinheiro, modoDemonstracao } from "../lib/vitrine";
+import { marcaAtual } from "../lib/marcas";
 import FormCompra from "./FormCompra";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "AmericaSim — eSIM para viagem",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata() {
+  const m = await marcaAtual();
+  return {
+    title: `${m.nome} — eSIM para viagem`,
+    robots: { index: false, follow: false },
+  };
+}
 
 interface Variante {
   sku: string;
@@ -31,14 +35,17 @@ function bandeiras(cobertura: unknown): string {
 }
 
 export default async function Loja() {
-  if (!chaveConfigurada()) {
+  const marca = await marcaAtual();
+
+  if (!(await chaveConfigurada())) {
     return (
       <main className="wrap">
         <div className="aviso">
           <h1>Vitrine sem chave de canal</h1>
           <p>
-            A variavel <code>CHAVE_VITRINE</code> nao esta no ambiente do servico. Sem ela a
-            loja nao consegue falar com a API <code>/v1</code>.
+            Nao ha chave para este dominio. Com mais de uma vitrine, a chave vem de{" "}
+            <code>CHAVES_VITRINE</code> (um mapa por dominio) ou de <code>CHAVE_VITRINE</code>{" "}
+            como padrao. Sem ela a loja nao consegue falar com a API <code>/v1</code>.
           </p>
         </div>
       </main>
@@ -66,9 +73,9 @@ export default async function Loja() {
       <header className="topo">
         <div className="marca">
           <span className="ponto" aria-hidden="true" />
-          AmericaSim
+          {marca.nome}
         </div>
-        <p className="chamada">Chegue conectado. Sem chip fisico, sem fila no aeroporto.</p>
+        <p className="chamada">{marca.chamada}</p>
       </header>
 
       {modoDemonstracao() ? (
@@ -110,7 +117,16 @@ export default async function Loja() {
                   {v.disponivel ? "Disponivel agora" : "Esgotado"}
                 </p>
 
-                <FormCompra sku={v.sku} tentativa={randomUUID()} disponivel={v.disponivel} />
+                {/* O rotulo do botao vem da MARCA: a AmericaSim vende impulso
+                    ("Quero agora"), a ViagemSim vende garantia ("Garantir meu
+                    eSIM"). E a diferenca de tom que faz duas vitrines serem
+                    duas apostas, e nao o mesmo site pintado de outra cor. */}
+                <FormCompra
+                  sku={v.sku}
+                  tentativa={randomUUID()}
+                  disponivel={v.disponivel}
+                  rotulo={marca.rotuloBotao}
+                />
 
                 <p className="sku">{v.sku}</p>
               </article>
@@ -120,8 +136,8 @@ export default async function Loja() {
       ))}
 
       <footer className="rodape">
-        AmericaSim · vitrine consumindo <code>GET /v1/catalogo</code> e{" "}
-        <code>POST /v1/checkout</code>
+        {marca.nome} · uma marca AmericaSim · vitrine consumindo{" "}
+        <code>GET /v1/catalogo</code> e <code>POST /v1/checkout</code>
       </footer>
     </main>
   );

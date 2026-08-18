@@ -6,7 +6,38 @@ import { headers } from "next/headers";
 // O canal nao e escolhido aqui: ele e derivado da chave pelo lib/api.ts (SPEC/03 par.1).
 
 const BASE = process.env.HUB_BASE_URL || "http://127.0.0.1:3002";
-const CHAVE = process.env.CHAVE_VITRINE || "";
+
+// Com mais de uma vitrine no mesmo processo, a chave deixa de ser uma variavel
+// e vira um mapa por dominio:
+//   CHAVES_VITRINE={"viagemsim.duckdns.org":"ask_...","outra.com":"ask_..."}
+// CHAVE_VITRINE continua valendo como padrao para o dominio principal, entao
+// nada quebra em quem ja estava configurado.
+function mapaChaves(): Record<string, string> {
+  const bruto = process.env.CHAVES_VITRINE ?? "";
+  if (!bruto.trim()) return {};
+  try {
+    const o = JSON.parse(bruto);
+    return o && typeof o === "object" ? (o as Record<string, string>) : {};
+  } catch {
+    // Nao derrubar a loja por causa de um JSON torto no .env — mas gritar no
+    // log, senao a vitrine cai para a chave padrao e ninguem entende por que a
+    // segunda loja mostra o catalogo da primeira.
+    console.error("CHAVES_VITRINE nao e um JSON valido; usando CHAVE_VITRINE.");
+    return {};
+  }
+}
+
+async function hostDaRequisicao(): Promise<string> {
+  const h = await headers();
+  const bruto = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  return bruto.split(":")[0].trim().toLowerCase();
+}
+
+export async function chaveDoCanal(): Promise<string> {
+  const m = mapaChaves();
+  const host = await hostDaRequisicao();
+  return m[host] || process.env.CHAVE_VITRINE || "";
+}
 
 // Interface unica com campos sempre presentes, nunca uniao discriminada:
 // o type-check do Next 16 rejeitou narrowing por `!x.ok` no bloco anterior.
@@ -18,8 +49,8 @@ export interface RespostaApi {
   erro_mensagem: string;
 }
 
-export function chaveConfigurada(): boolean {
-  return CHAVE.startsWith("ask_");
+export async function chaveConfigurada(): Promise<boolean> {
+  return (await chaveDoCanal()).startsWith("ask_");
 }
 
 export function modoDemonstracao(): boolean {
@@ -32,13 +63,14 @@ async function chamar(
   corpo?: unknown,
   cabecalhos?: Record<string, string>,
 ): Promise<RespostaApi> {
-  if (!chaveConfigurada()) {
+  const chave = await chaveDoCanal();
+  if (!chave.startsWith("ask_")) {
     return {
       ok: false,
       status: 0,
       dados: null,
       erro_codigo: "chave_ausente",
-      erro_mensagem: "CHAVE_VITRINE nao esta no ambiente do servico.",
+      erro_mensagem: `Nao ha chave de canal para o dominio ${await hostDaRequisicao()}.`,
     };
   }
 
@@ -47,7 +79,7 @@ async function chamar(
     r = await fetch(`${BASE}${caminho}`, {
       method: metodo,
       headers: {
-        authorization: `Bearer ${CHAVE}`,
+        authorization: `Bearer ${chave}`,
         "content-type": "application/json",
         ...(cabecalhos ?? {}),
       },
@@ -96,7 +128,8 @@ export function apiPost(
 }
 
 // Base publica real (dominio que o cliente digitou), lida do proxy. Precisa ser a
-// externa porque vira `url_sucesso` do checkout — o cliente e devolvido para la.
+// externa porque vira `url_sucesso` do checkout — o cliente e devolvido para la,
+// e com duas vitrines ele PRECISA voltar para a loja onde comprou.
 export async function basePublica(): Promise<string> {
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? "http";
