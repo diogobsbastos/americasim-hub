@@ -59,12 +59,13 @@ export default async function EstoqueGeral({
         order by p.nome, v.sku`,
       [fProd],
     ),
-    // O alerta que justifica a tela existir: variante SEM codigo livre que
-    // continua visivel numa vitrine. Hoje isso so aparece quando o cliente paga
-    // e o checkout devolve `estoque_indisponivel` — ou seja, o cliente descobre
-    // antes de nos.
+    // Variantes marcadas como visiveis que estao sem codigo livre.
+    // Desde a migracao 007 elas SOMEM da vitrine sozinhas — entao isto virou
+    // aviso de reposicao, nao alarme de venda quebrada. So continua sendo
+    // alarme quando `mostrar_esgotado` esta ligado: ai a variante segue
+    // aparecendo na loja sem ter o que entregar.
     db.query(
-      `select p.handle, p.nome as produto, v.sku, c.codigo as canal
+      `select p.handle, p.nome as produto, v.sku, c.codigo as canal, cv.mostrar_esgotado
          from canal_variante cv
          join variante v on v.id = cv.variante_id and v.ativo
          join produto p on p.id = v.produto_id and p.ativo
@@ -110,6 +111,12 @@ export default async function EstoqueGeral({
   const total = quantos.rows[0]?.n ?? 0;
   const linhas: LinhaEstoque[] = codigos.rows as any;
 
+  // Duas leituras muito diferentes da mesma consulta: o que saiu da loja
+  // sozinho (aviso de reposicao) e o que continua a venda sem ter o que
+  // entregar (problema de verdade).
+  const forcadas = atencao.rows.filter((a: any) => a.mostrar_esgotado);
+  const sumiram = atencao.rows.filter((a: any) => !a.mostrar_esgotado);
+
   function descrever(m: any): string {
     if (m.tipo === "correcao") {
       const c = m.campos ?? {};
@@ -133,23 +140,47 @@ export default async function EstoqueGeral({
       </div>
 
       {/* ------------------------------------------------ precisa de atenção */}
-      {atencao.rows.length > 0 ? (
-        <div className="cartao perigo" style={{ marginBottom: 22 }}>
+      {forcadas.length > 0 ? (
+        <div className="cartao perigo" style={{ marginBottom: 16 }}>
           <p style={{ margin: "0 0 8px", fontWeight: 700, color: "var(--erro)" }}>
-            {atencao.rows.length} variante(s) sem código livre e ainda à venda
+            {forcadas.length} variante(s) sem código livre e AINDA aparecendo na loja
           </p>
           <p style={{ margin: "0 0 10px", color: "var(--texto-fraco)", fontSize: "0.86rem" }}>
-            A loja está mostrando e aceitando clique. O cliente só descobre depois de pagar,
-            quando o checkout recusa. Ou repõe o estoque, ou tira de visível na tela de Produtos.
+            Estão marcadas para continuar visíveis mesmo esgotadas. O cliente vê o card e o
+            botão recusa. Reponha o estoque ou desligue essa marcação.
           </p>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: "0.88rem" }}>
-            {atencao.rows.map((a: any, i: number) => (
+            {forcadas.map((a: any, i: number) => (
               <li key={i}>
                 <Link href={`/painel/produtos/${a.handle}`}>
                   <code>{a.sku}</code>
                 </Link>{" "}
                 <span style={{ color: "var(--texto-fraco)" }}>
-                  — {a.produto} · visível em <b>{a.canal}</b>
+                  — {a.produto} · em <b>{a.canal}</b>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {sumiram.length > 0 ? (
+        <div className="cartao" style={{ marginBottom: 22, borderLeft: "4px solid var(--alerta)" }}>
+          <p style={{ margin: "0 0 6px", fontWeight: 700, color: "var(--alerta)" }}>
+            {sumiram.length} variante(s) esgotada(s) — saíram das vitrines sozinhas
+          </p>
+          <p style={{ margin: "0 0 10px", color: "var(--texto-fraco)", fontSize: "0.86rem" }}>
+            Ninguém consegue comprar o que não existe: sem código livre, a variante some da
+            loja e <b>volta sozinha</b> assim que você der entrada em estoque. Continuam
+            marcadas como visíveis — sua decisão de vendê-las está intacta.
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: "0.88rem" }}>
+            {sumiram.map((a: any, i: number) => (
+              <li key={i}>
+                <code>{a.sku}</code>{" "}
+                <span style={{ color: "var(--texto-fraco)" }}>
+                  — {a.produto} · fora de <b>{a.canal}</b> ·{" "}
+                  <Link href={`/painel/produtos/${a.handle}/estoque`}>dar entrada</Link>
                 </span>
               </li>
             ))}

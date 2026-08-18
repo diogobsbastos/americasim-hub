@@ -6,20 +6,32 @@ export const dynamic = "force-dynamic";
 // GET /v1/catalogo — produtos visiveis NO CANAL DA CHAVE, com preco vigente.
 // Dinheiro trafega como STRING decimal.
 //
-// `quantidade` (18/08, a pedido do Contratado): a contagem de codigos livres,
-// agora exposta junto com `disponivel`. A versao anterior devolvia so o booleano,
-// de proposito — contagem publica e informacao de negocio (quanto voce comprou,
-// quanto vendeu) e vira alavanca de escassez involuntaria.
+// ESGOTADO SOME DA VITRINE (migracao 007). Variante sem codigo livre nao entra
+// no catalogo, e volta sozinha quando entra estoque. Antes ela ficava no ar
+// como "Esgotado" ate alguem lembrar de desmarcar na mao — e "ate alguem
+// lembrar" nao e um mecanismo.
 //
-// O que mudou o calculo: as duas vitrines dividem o MESMO estoque, e o unico
-// jeito de mostrar isso a quem esta olhando de fora e o numero caindo nas duas
-// telas ao mesmo tempo. Hoje a loja inteira esta atras de Basic Auth, entao o
-// numero nao e publico de fato. Quando ela abrir, a decisao volta para a mesa:
-// o caminho usual e mostrar a contagem so abaixo de um limite ("ultimas 3
-// unidades") e omitir acima dele.
+// `cv.visivel` NAO e tocado por isso: ele guarda a INTENCAO do operador
+// ("quero vender isto nesta loja"). Desliga-lo automaticamente apagaria uma
+// decisao humana, e na reposicao ninguem saberia se o item voltou porque o
+// operador queria ou porque o sistema mexeu. Intencao e disponibilidade sao
+// duas coisas diferentes.
 //
-// `disponivel` continua no contrato e continua booleano — quem ja consome a API
-// nao precisa mudar nada.
+// `cv.mostrar_esgotado = true` e a valvula para o caso oposto: continuar
+// aparecendo marcado como Esgotado, para nao perder posicao de busca ou para
+// medir procura por algo que acabou.
+//
+// QUANDO ENTRAR O FORNECIMENTO SOB DEMANDA (T-Mobile, China Mobile), esta
+// condicao precisa ganhar um `or variante.modo_fornecimento = 'api'`: la o eSIM
+// nasce na hora da venda e a contagem de estoque e sempre zero. Hoje nenhuma
+// variante e sob demanda, entao nao ha o que quebrar ainda.
+//
+// `quantidade` (18/08, a pedido do Contratado): contagem de codigos livres. As
+// duas vitrines dividem o MESMO estoque, e o unico jeito de mostrar isso de
+// fora e o numero caindo nas duas telas ao mesmo tempo. Hoje a loja esta atras
+// de Basic Auth, entao o numero nao e publico de fato; quando ela abrir, o
+// caminho usual e mostrar a contagem so abaixo de um limite ("ultimas 3
+// unidades"). `disponivel` continua no contrato e continua booleano.
 export async function GET(req: Request) {
   const canal = await autenticar(req, "catalogo");
   if (canal instanceof Response) return canal;
@@ -28,15 +40,19 @@ export async function GET(req: Request) {
     const r = await db.query(
       `select p.handle, p.nome as produto_nome, p.descricao,
               v.sku, v.atributos, pr.valor::text as preco, pr.moeda,
-              cv.destaque,
-              (select count(*) from estoque_esim e
-                where e.variante_id = v.id and e.status = 'disponivel')::int as quantidade
+              cv.destaque, q.n::int as quantidade
          from canal_variante cv
          join variante v on v.id = cv.variante_id and v.ativo
          join produto  p on p.id = v.produto_id  and p.ativo
          join preco   pr on pr.variante_id = v.id and pr.canal_id = cv.canal_id
                         and pr.vigencia_fim is null
-        where cv.canal_id = $1 and cv.visivel
+         cross join lateral (
+           select count(*) as n from estoque_esim e
+            where e.variante_id = v.id and e.status = 'disponivel'
+         ) q
+        where cv.canal_id = $1
+          and cv.visivel
+          and (cv.mostrar_esgotado or q.n > 0)
         order by cv.destaque desc, cv.ordem nulls last, p.handle`,
       [canal.id],
     );
