@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { apiGet, chaveConfigurada, formatarDinheiro, modoDemonstracao } from "../lib/vitrine";
+import { apiGet, chaveConfigurada, formatarDinheiro, modoPagamento } from "../lib/vitrine";
 import { marcaAtual } from "../lib/marcas";
 import FormCompra from "./FormCompra";
 
@@ -77,6 +77,9 @@ export default async function Loja() {
   }
 
   const produtos: Produto[] = r.dados?.produtos ?? [];
+  // Calculado aqui, e nao no JSX: `modoPagamento` e assincrona porque a chave
+  // da Stripe pode morar no cofre cifrado, nao so no ambiente.
+  const modoPg = await modoPagamento();
 
   return (
     <main className="wrap">
@@ -88,10 +91,18 @@ export default async function Loja() {
         <p className="chamada">{marca.chamada}</p>
       </header>
 
-      {modoDemonstracao() ? (
+      {modoPg === "demonstracao" ? (
         <p className="faixa">
           <strong>Modo demonstracao.</strong> Nenhum pagamento e cobrado: o pedido e
           considerado pago na hora e o eSIM sai do estoque de teste.
+        </p>
+      ) : null}
+
+      {modoPg === "teste" ? (
+        <p className="faixa">
+          <strong>Modo de teste.</strong> O pagamento e simulado pelo provedor: nenhum
+          dinheiro real e movimentado. Use o cartao <code>4242 4242 4242 4242</code> com
+          qualquer validade futura e qualquer CVC.
         </p>
       ) : null}
 

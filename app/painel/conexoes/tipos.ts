@@ -26,3 +26,22 @@ export interface EstadoUsuarioTeste {
 export const ESTADO_USUARIO_TESTE_INICIAL: EstadoUsuarioTeste = {
   erro: "", ok: "", criado: null, senhaDe: "", senha: "",
 };
+
+// ------------------------------------------------------------------- Stripe
+
+// O resultado de FALAR com a Stripe. "A chave existe" e "a chave funciona" sao
+// fatos diferentes: so este teste prova o segundo, e e ele que enche o cartao
+// com o nome da conta.
+export interface EstadoTesteStripe {
+  erro: string;
+  ok: string;
+  conta: {
+    id: string;
+    nome: string;
+    pais: string;
+    moeda: string;
+    podeCobrar: boolean;
+  } | null;
+}
+
+export const ESTADO_TESTE_STRIPE_INICIAL: EstadoTesteStripe = { erro: "", ok: "", conta: null };
