@@ -178,14 +178,23 @@ export async function conferirConta(): Promise<{
   const s = await clienteStripe();
   if (!s) return { ok: false, erro: "Nao ha chave secreta valida guardada." };
   try {
-    const c = await s.cli.accounts.retrieve();
+    // POR QUE rawRequest E NAO `accounts.retrieve()`:
+    // no SDK v22 a sobrecarga sem argumento deixou de existir — `retrieve`
+    // passou a exigir o ID da conta, que e exatamente o que ainda nao sabemos.
+    // `GET /v1/account` devolve a conta DA PROPRIA CHAVE, e e o unico jeito de
+    // descobrir de quem e a chave sem ja saber de quem ela e.
+    // (Conferido com tsc --strict contra stripe@22.5.0 em 20/08/2026, depois
+    // de o build quebrar com: "Expected 1-3 arguments, but got 0".)
+    const c: any = await s.cli.rawRequest("GET", "/v1/account");
     return {
       ok: true,
-      id: c.id,
-      nome: c.business_profile?.name ?? c.settings?.dashboard?.display_name ?? c.email ?? c.id,
-      pais: c.country ?? "",
-      moeda: (c.default_currency ?? "").toUpperCase(),
-      podeCobrar: !!c.charges_enabled,
+      id: String(c?.id ?? ""),
+      nome: String(
+        c?.business_profile?.name ?? c?.settings?.dashboard?.display_name ?? c?.email ?? c?.id ?? "",
+      ),
+      pais: String(c?.country ?? ""),
+      moeda: String(c?.default_currency ?? "").toUpperCase(),
+      podeCobrar: !!c?.charges_enabled,
     };
   } catch (e: any) {
     // A mensagem da Stripe e util e nao contem segredo — vale mostrar inteira.
