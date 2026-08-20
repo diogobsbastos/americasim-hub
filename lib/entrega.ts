@@ -39,11 +39,27 @@ export async function entregarPedido(
       return { ok: false, motivo: "status_incompativel", status: p.rows[0]?.status }; // ERRO, nunca sucesso
     }
 
+    // Tres origens aceitas, nesta ordem de preferencia (migracao 007):
+    //   0. o codigo JA RESERVADO para este pedido no checkout — e o caminho
+    //      normal quando existe gateway: o cliente pagou pelo que foi separado
+    //      para ele, e nao por um sobrando qualquer;
+    //   1. um disponivel — caminho do modo dev, sem reserva;
+    //   2. uma reserva de OUTRO pedido que ja venceu — o carrinho abandonado
+    //      devolve o estoque sozinho aqui, sem rotina de faxina.
+    // A ordenacao pelo `case` garante a preferencia; sem ela, um pedido pago
+    // poderia levar um codigo qualquer e deixar o proprio reservado preso.
     const cod = await c.query(
-      `update estoque_esim set status = 'entregue', pedido_id = $1
+      `update estoque_esim
+          set status = 'entregue', pedido_id = $1, reservado_ate = null
         where id = (select id from estoque_esim
-                     where variante_id = $2 and status = 'disponivel'
-                     order by criado_em for update skip locked limit 1)
+                     where variante_id = $2
+                       and (status = 'disponivel'
+                            or (status = 'reservado' and pedido_id = $1)
+                            or (status = 'reservado' and reservado_ate is not null
+                                and reservado_ate < now()))
+                     order by (case when status = 'reservado' and pedido_id = $1 then 0 else 1 end),
+                              criado_em
+                     for update skip locked limit 1)
         returning id, custo_brl`,
       [pedidoId, varianteId],
     );

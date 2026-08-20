@@ -1,4 +1,6 @@
 import { headers } from "next/headers";
+import { lerSegredoApp } from "./segredo-app";
+import { CHAVE_SECRETA, modoDaChave } from "./stripe";
 
 // A vitrine consome a API /v1 por HTTP, com a chave do canal, exatamente como um
 // cliente externo faria. Ela NUNCA fala com o banco direto (SPEC/07): se o contrato
@@ -53,8 +55,27 @@ export async function chaveConfigurada(): Promise<boolean> {
   return (await chaveDoCanal()).startsWith("ask_");
 }
 
-export function modoDemonstracao(): boolean {
-  return !process.env.STRIPE_SECRET_KEY;
+// O que a LOJA promete ao cliente sobre cobranca. Substituiu o antigo
+// `modoDemonstracao()` booleano em 20/08/2026, por dois motivos:
+//
+// 1. a chave agora pode vir do cofre cifrado (tela), nao so do `.env` — e este
+//    texto PRECISA enxergar a chave pelo mesmo caminho que o checkout, senao
+//    existe o estado em que a loja cobra de verdade continuando a anunciar que
+//    ninguem sera cobrado;
+// 2. "tem gateway" nao basta: gateway em modo de TESTE tambem nao cobra, e
+//    quem estiver testando precisa ver isso escrito na tela.
+//
+// Derivado do prefixo da chave, nunca de flag — flag e chave podem discordar.
+export type ModoPagamentoLoja = "demonstracao" | "teste" | "producao";
+
+export async function modoPagamento(): Promise<ModoPagamentoLoja> {
+  const chave = await lerSegredoApp(CHAVE_SECRETA);
+  const m = modoDaChave(chave);
+  if (m === "teste") return "teste";
+  if (m === "producao") return "producao";
+  // `invalida` cai aqui junto com `nenhum`: chave que nao serve nao cobra nada,
+  // e o checkout tambem a trata como ausente. Dizer "demonstracao" e a verdade.
+  return "demonstracao";
 }
 
 async function chamar(
