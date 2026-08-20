@@ -1,7 +1,9 @@
 import { headers } from "next/headers";
 import { CONECTORES, estadoDoConector } from "../../../lib/conectores";
+import { estadoStripe } from "../../../lib/stripe";
 import { usuarioDaSessao } from "../../../lib/painel/sessao";
 import Cartao from "./Cartao";
+import CartaoStripe from "./CartaoStripe";
 
 export const dynamic = "force-dynamic";
 
@@ -32,16 +34,19 @@ export default async function Conexoes({
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "127.0.0.1:3002";
   const base = `${proto}://${host}`;
 
-  const estados = await Promise.all(CONECTORES.map((c) => estadoDoConector(c)));
+  const [estados, stripe] = await Promise.all([
+    Promise.all(CONECTORES.map((c) => estadoDoConector(c))),
+    estadoStripe(),
+  ]);
 
   return (
     <>
       <div className="pn-cabeca">
         <h1>Conexões</h1>
         <p>
-          Onde o hub se liga aos marketplaces. Cada conexão é uma permissão que você dá para
-          este sistema publicar e vender em seu nome — por isso mexer aqui é só de admin, e
-          por isso o passo a passo está na tela, não numa conversa.
+          Onde o hub se liga ao mundo: quem recebe o dinheiro, e onde os produtos são vendidos.
+          Cada conexão é uma permissão que você dá para este sistema agir em seu nome — por isso
+          mexer aqui é só de admin, e por isso o passo a passo está na tela, não numa conversa.
         </p>
       </div>
 
@@ -66,6 +71,31 @@ export default async function Conexoes({
         </p>
       ) : null}
 
+      {/* Pagamento vem PRIMEIRO de proposito: sem ele, nenhum canal vende de
+          verdade — o marketplace mais bem configurado do mundo nao cobra nada
+          se o gateway nao estiver ligado. */}
+      <h2 style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.1em",
+                   color: "var(--texto-fraco)", margin: "0 0 10px" }}>
+        Recebimento
+      </h2>
+      <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))" }}>
+        <CartaoStripe
+          modo={stripe.modo}
+          temSecreta={stripe.temSecreta}
+          temWebhook={stripe.temWebhook}
+          ondeSecreta={stripe.ondeSecreta}
+          ondeWebhook={stripe.ondeWebhook}
+          urlWebhook={`${base}/v1/webhooks/stripe`}
+          comissaoFixa={stripe.comissaoFixa}
+          comissaoPct={stripe.comissaoPct}
+          podeMexer={!!podeMexer}
+        />
+      </div>
+
+      <h2 style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.1em",
+                   color: "var(--texto-fraco)", margin: "26px 0 10px" }}>
+        Canais de venda
+      </h2>
       <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))" }}>
         {estados.map((e) => (
           <Cartao
@@ -102,9 +132,9 @@ export default async function Conexoes({
           borderLeft: "3px solid var(--borda)", paddingLeft: 12,
         }}
       >
-        <b>A senha da aplicação e o token de acesso são guardados cifrados</b>, com a chave-mãe
-        fora do banco. Um backup roubado, sozinho, não abre nada — e nenhum dos dois volta para
-        esta tela depois de salvo.
+        <b>Chaves, senhas de aplicação e tokens são guardados cifrados</b>, com a chave-mãe fora
+        do banco. Um backup roubado, sozinho, não abre nada — e nenhum deles volta para esta tela
+        depois de salvo.
       </p>
     </>
   );
