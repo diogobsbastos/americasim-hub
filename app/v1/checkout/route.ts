@@ -4,8 +4,16 @@ import { db } from "../../../lib/db";
 import { novoNumeroPedido } from "../../../lib/numero";
 import { assinarAcompanhamento } from "../../../lib/token";
 import { entregarPedido } from "../../../lib/entrega";
+import { clienteStripe, comissaoDaVenda, paraCentavos, deCentavos } from "../../../lib/stripe";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+// Quanto tempo o eSIM fica preso ao pedido enquanto o cliente paga. Curto o
+// bastante para carrinho abandonado nao comer o estoque; longo o bastante para
+// caber um Pix conferido com calma. Reserva vencida volta sozinha na proxima
+// alocacao — nao existe rotina de faxina para dar errado de madrugada.
+const MINUTOS_RESERVA = 40;
 
 // Campos de atribuicao aceitos no corpo (migracao 004). Lista fechada de
 // proposito: campo desconhecido vindo do cliente nao entra no banco.
@@ -85,9 +93,11 @@ async function gravarToque(
 }
 
 // POST /v1/checkout — SPEC/03. Gateway plugavel:
-// - COM STRIPE_SECRET_KEY no ambiente: cria sessao Stripe (proximo bloco).
+// - COM chave secreta da Stripe (ambiente ou cofre cifrado): reserva o eSIM,
+//   cria a sessao de pagamento e devolve a URL da Stripe. A entrega so acontece
+//   quando o webhook confirmar o dinheiro.
 // - SEM a chave (modo dev): considera pago e executa a entrega na hora, para o
-//   fluxo completo ser testavel antes de a conta Stripe existir.
+//   fluxo completo ser testavel sem conta de pagamento.
 // O modo e derivado da credencial presente — nunca de flag separada (SPEC/04 §3.6).
 export async function POST(req: Request) {
   const canal = await autenticar(req, "pedidos");
@@ -124,9 +134,10 @@ export async function POST(req: Request) {
 
   try {
     const v = await db.query(
-      `select v.id as variante_id, pr.valor, pr.moeda
+      `select v.id as variante_id, pr.valor, pr.moeda, p.nome as produto_nome, v.sku
          from canal_variante cv
          join variante v on v.id = cv.variante_id and v.ativo
+         join produto p on p.id = v.produto_id
          join preco pr on pr.variante_id = v.id and pr.canal_id = cv.canal_id
                       and pr.vigencia_fim is null
         where cv.canal_id = $1 and cv.visivel and v.sku = $2`,
@@ -168,26 +179,140 @@ export async function POST(req: Request) {
        values ($1, $2, $3, 'aguardando_pagamento', $4, $5, $6) returning id`,
       [numero, canal.id, cli.rows[0].id, va.valor, va.moeda, idUltimo],
     );
+    const pedidoId: string = ped.rows[0].id;
     const item = await db.query(
       `insert into item_pedido (pedido_id, variante_id, quantidade, preco_unit, moeda)
        values ($1, $2, 1, $3, $4) returning id`,
-      [ped.rows[0].id, va.variante_id, va.valor, va.moeda],
+      [pedidoId, va.variante_id, va.valor, va.moeda],
     );
+    const itemId: string = item.rows[0].id;
 
     const t = assinarAcompanhamento(numero);
     const sep = urlSucesso.includes("?") ? "&" : "?";
     const urlRetorno = `${urlSucesso}${sep}pedido=${numero}&t=${t}`;
 
-    let resposta: unknown;
-    if (process.env.STRIPE_SECRET_KEY) {
-      // Proximo bloco (quando a conta chegar): criar a sessao Stripe aqui, com
-      // metadata.canal_id e statement_descriptor_suffix da marca.
-      return erro(500, "erro_interno", "Gateway Stripe ainda nao configurado neste build.");
+    const gw = await clienteStripe();
+
+    // ===================================================== COM GATEWAY =======
+    if (gw) {
+      // 1. RESERVAR ANTES DE COBRAR. Sem isto, dois clientes pagam pelo mesmo
+      //    ultimo eSIM e um deles fica com dinheiro tomado e nada entregue —
+      //    o pior defeito possivel neste modelo de negocio.
+      const res = await db.query(
+        `update estoque_esim
+            set status = 'reservado', pedido_id = $1,
+                reservado_ate = now() + ($3 || ' minutes')::interval
+          where id = (select id from estoque_esim
+                       where variante_id = $2
+                         and (status = 'disponivel'
+                              or (status = 'reservado' and reservado_ate is not null
+                                  and reservado_ate < now()))
+                       order by criado_em
+                       for update skip locked limit 1)
+          returning id`,
+        [pedidoId, va.variante_id, String(MINUTOS_RESERVA)],
+      );
+      if (res.rows.length === 0) {
+        // Sem estoque: o pedido morre aqui em vez de virar cobranca impagavel.
+        await db.query("update pedido set status = 'cancelado' where id = $1", [pedidoId]);
+        return erro(422, "estoque_indisponivel", "Nao ha eSIM disponivel para esta variante no momento.", {
+          variante: itens[0].sku,
+        });
+      }
+
+      const totalCentavos = paraCentavos(va.valor);
+      const com = await comissaoDaVenda(totalCentavos);
+
+      // 2. Congelar a comissao no pedido. Regra que mudar amanha nao reescreve
+      //    o que foi vendido hoje.
+      await db.query(
+        `update pedido
+            set comissao_valor = $2, comissao_moeda = $3, comissao_regra = $4,
+                comissao_congelada_em = now()
+          where id = $1`,
+        [pedidoId, deCentavos(com.centavos), va.moeda, com.regra],
+      );
+
+      // Metadata vai na sessao E no PaymentIntent: eventos de pagamento assincrono
+      // (Pix, boleto) chegam pelo PI, e sem metadata la o webhook nao sabe de
+      // qual pedido se trata.
+      const meta = {
+        pedido_id: pedidoId,
+        pedido_numero: numero,
+        item_pedido_id: itemId,
+        variante_id: va.variante_id,
+        canal_id: canal.id,
+        comissao_centavos: String(com.centavos),
+      };
+
+      let sessao;
+      try {
+        sessao = await gw.cli.checkout.sessions.create(
+          {
+            mode: "payment",
+            line_items: [
+              {
+                quantity: 1,
+                price_data: {
+                  currency: String(va.moeda).toLowerCase(),
+                  unit_amount: totalCentavos,
+                  product_data: {
+                    name: String(va.produto_nome ?? va.sku),
+                    description: String(va.sku),
+                  },
+                },
+              },
+            ],
+            customer_email: email,
+            client_reference_id: numero,
+            metadata: meta,
+            payment_intent_data: { metadata: meta },
+            success_url: urlRetorno,
+            // Cancelar volta para a loja. A reserva do eSIM nao e devolvida na
+            // hora de proposito: o cliente que desiste costuma voltar, e a
+            // reserva expira sozinha em MINUTOS_RESERVA.
+            cancel_url: urlSucesso,
+          },
+          // Mesma chave de idempotencia do nosso checkout: se a rede cair entre
+          // criar a sessao e gravar a resposta, o retry devolve A MESMA sessao
+          // em vez de abrir uma segunda cobranca.
+          { idempotencyKey: chaveIdem },
+        );
+      } catch (e: any) {
+        // Cobranca nao criada: devolver a reserva na hora, senao o eSIM fica
+        // preso 40 minutos por um erro que ja se sabe que aconteceu.
+        await db.query(
+          `update estoque_esim set status = 'disponivel', pedido_id = null, reservado_ate = null
+            where pedido_id = $1 and status = 'reservado'`,
+          [pedidoId],
+        );
+        await db.query("update pedido set status = 'cancelado' where id = $1", [pedidoId]);
+        console.error("stripe.checkout:", e?.message ?? e);
+        return erro(502, "gateway_recusou", "O provedor de pagamento nao aceitou criar a cobranca.");
+      }
+
+      await db.query(
+        `insert into pagamento (pedido_id, provedor, ref_externa, status, valor, moeda)
+         values ($1, 'stripe', $2, 'iniciado', $3, $4)`,
+        [pedidoId, sessao.id, va.valor, va.moeda],
+      );
+      await db.query("update pedido set pagamento_ref = $2 where id = $1", [pedidoId, sessao.id]);
+
+      const resposta = {
+        pedido: { numero, total: String(va.valor), moeda: va.moeda },
+        pagamento: { url: sessao.url, modo: `stripe_${gw.modo}` },
+      };
+      await db.query(
+        `insert into requisicao_idempotente (chave, escopo, resposta)
+         values ($1, 'checkout', $2::jsonb) on conflict (chave) do nothing`,
+        [chaveIdem, JSON.stringify(resposta)],
+      );
+      return Response.json(resposta);
     }
 
     // ===== MODO DEV (sem gateway): paga e entrega na hora =====
-    await db.query("update pedido set status = 'pago' where id = $1", [ped.rows[0].id]);
-    const ent = await entregarPedido(ped.rows[0].id, va.variante_id, item.rows[0].id);
+    await db.query("update pedido set status = 'pago' where id = $1", [pedidoId]);
+    const ent = await entregarPedido(pedidoId, va.variante_id, itemId);
     if (!ent.ok) {
       if (ent.motivo === "sem_estoque") {
         return erro(422, "estoque_indisponivel", "Nao ha eSIM disponivel para esta variante no momento.", {
@@ -196,7 +321,7 @@ export async function POST(req: Request) {
       }
       return erro(500, "erro_interno", "Falha na entrega do pedido.");
     }
-    resposta = {
+    const resposta = {
       pedido: { numero, total: String(va.valor), moeda: va.moeda },
       pagamento: { url: urlRetorno, modo: "dev_sem_gateway" },
     };
