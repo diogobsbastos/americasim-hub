@@ -11,6 +11,11 @@ import { usePathname } from "next/navigation";
 // fornecedores e trinta variantes, ninguem entra produto por produto para
 // descobrir o que esta acabando. A tela dentro do produto continua existindo
 // como atalho e como lugar da ENTRADA de lote.
+//
+// Dinheiro e grupo proprio desde 21/08/2026. Pagamentos estava dentro de
+// Conexoes porque as duas sao "ligacoes com o mundo" — mas para quem opera sao
+// coisas diferentes: Conexoes e ONDE A GENTE VENDE, Pagamentos e COMO A GENTE
+// RECEBE. Quem entra para resolver dinheiro nao quer passar por anuncio.
 const AREAS = [
   {
     grupo: "Operação",
@@ -19,6 +24,12 @@ const AREAS = [
       { href: "/painel/vendas", rotulo: "Vendas", pronto: true, exato: false },
       { href: "/painel/produtos", rotulo: "Produtos", pronto: true, exato: false },
       { href: "/painel/estoque", rotulo: "Estoque", pronto: true, exato: false },
+    ],
+  },
+  {
+    grupo: "Dinheiro",
+    itens: [
+      { href: "/painel/pagamentos", rotulo: "Pagamentos", pronto: true, exato: false },
     ],
   },
   {
