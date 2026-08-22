@@ -13,9 +13,16 @@ export const metadata = {
 // tabela `canal` e como vhost no Nginx — dois lugares que ninguem da operacao
 // abre. Aqui elas viram uma lista com botao.
 //
-// O link sai do banco (`canal.dominio`), NAO de uma constante no codigo. Se
-// alguem cadastrar uma vitrine nova amanha, ela aparece aqui sozinha. Uma lista
-// escrita a mao envelheceria no primeiro dia e passaria a mentir.
+// O link sai do banco, NAO de uma constante no codigo. Se alguem cadastrar uma
+// vitrine nova amanha, ela aparece aqui sozinha. Uma lista escrita a mao
+// envelheceria no primeiro dia e passaria a mentir.
+//
+// DUAS FONTES para o dominio, e isso nao e descuido: a tela de Pagamentos
+// (20/08) grava e le `canal.config->>'dominio'`, enquanto a coluna
+// `canal.dominio` e mais antiga e hoje guarda 'localhost' na loja principal.
+// A convencao nova ganha; a coluna fica de rede de seguranca. Escolher so uma
+// deixaria esta tela discordando da outra em silencio — que e exatamente o tipo
+// de divergencia que ninguem descobre ate o cliente reclamar.
 
 interface Linha {
   codigo: string;
@@ -46,14 +53,15 @@ export default async function Vitrines() {
   let falhou = "";
   try {
     const r = await db.query(
-      `select c.codigo, c.nome, c.dominio, c.ativo,
+      `select c.codigo, c.nome, c.ativo,
+              coalesce(nullif(c.config->>'dominio', ''), c.dominio) as dominio,
               count(cv.variante_id) filter (where cv.visivel)  as visiveis,
               count(cv.variante_id) filter (where cv.destaque) as destaques,
               count(cv.variante_id)                            as total
          from canal c
          left join canal_variante cv on cv.canal_id = c.id
-        where c.tipo = 'landing'
-        group by c.id, c.codigo, c.nome, c.dominio, c.ativo
+        where c.tipo = 'landing'::tipo_canal
+        group by c.id, c.codigo, c.nome, c.config, c.dominio, c.ativo
         order by c.codigo`,
     );
     linhas = r.rows.map((x: any) => ({
