@@ -9,17 +9,19 @@ import { usePathname } from "next/navigation";
 // Estoque e area PROPRIA, e nao so uma aba dentro de cada produto. Enquanto ha
 // um produto so, esconder o estoque la dentro parece organizado; com dez
 // fornecedores e trinta variantes, ninguem entra produto por produto para
-// descobrir o que esta acabando. A tela dentro do produto continua existindo
-// como atalho e como lugar da ENTRADA de lote.
+// descobrir o que esta acabando.
+//
+// Fornecedores segue a mesma regra e pelo mesmo motivo (22/08/2026): ele
+// reclamou de olhar o menu e concluir que o sistema nao existia. Area que a
+// operacao usa todo dia tem que estar no menu.
 //
 // Dinheiro e grupo proprio desde 21/08/2026. Pagamentos estava dentro de
 // Conexoes porque as duas sao "ligacoes com o mundo" — mas para quem opera sao
 // coisas diferentes: Conexoes e ONDE A GENTE VENDE, Pagamentos e COMO A GENTE
-// RECEBE. Quem entra para resolver dinheiro nao quer passar por anuncio.
+// RECEBE.
 //
-// Vitrines vem ANTES de Conexoes no grupo Canais (21/08/2026): a loja propria e
-// o canal que ja existe e que se abre todo dia para conferir; Conexoes trata dos
-// marketplaces, que sao mais raros de mexer.
+// Vitrines vem ANTES de Conexoes no grupo Canais: a loja propria e o canal que
+// se abre todo dia para conferir; Conexoes trata dos marketplaces.
 const AREAS = [
   {
     grupo: "Operação",
@@ -28,6 +30,7 @@ const AREAS = [
       { href: "/painel/vendas", rotulo: "Vendas", pronto: true, exato: false },
       { href: "/painel/produtos", rotulo: "Produtos", pronto: true, exato: false },
       { href: "/painel/estoque", rotulo: "Estoque", pronto: true, exato: false },
+      { href: "/painel/fornecedores", rotulo: "Fornecedores", pronto: true, exato: false },
     ],
   },
   {
