@@ -16,6 +16,10 @@ import { usePathname } from "next/navigation";
 // Conexoes porque as duas sao "ligacoes com o mundo" — mas para quem opera sao
 // coisas diferentes: Conexoes e ONDE A GENTE VENDE, Pagamentos e COMO A GENTE
 // RECEBE. Quem entra para resolver dinheiro nao quer passar por anuncio.
+//
+// Vitrines vem ANTES de Conexoes no grupo Canais (21/08/2026): a loja propria e
+// o canal que ja existe e que se abre todo dia para conferir; Conexoes trata dos
+// marketplaces, que sao mais raros de mexer.
 const AREAS = [
   {
     grupo: "Operação",
@@ -35,6 +39,7 @@ const AREAS = [
   {
     grupo: "Canais",
     itens: [
+      { href: "/painel/vitrines", rotulo: "Vitrines", pronto: true, exato: false },
       { href: "/painel/conexoes", rotulo: "Conexões", pronto: true, exato: false },
       { href: "/painel/apis", rotulo: "APIs", pronto: false, exato: false },
     ],
