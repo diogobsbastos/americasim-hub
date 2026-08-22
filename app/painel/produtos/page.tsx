@@ -8,16 +8,17 @@ export const metadata = { title: "Produtos — AmericaSim", robots: { index: fal
 // A lista e dos SKUs, nao das familias (22/08/2026).
 //
 // Antes cada linha era um `produto` e as variantes ficavam escondidas la dentro.
-// So que quem tem preco, custo, saldo e anuncio e a VARIANTE — a familia nao tem
-// nenhum desses. Uma lista de familias respondia "quantos catalogos temos", que
-// ninguem pergunta, em vez de "o que esta a venda e como esta", que e a unica
-// pergunta que se faz aqui todo dia. E o mesmo arranjo do Bling, onde o produto
-// pai nao tem estoque e a listagem agrupa as filhas embaixo dele.
+// So que quem tem preco, custo, saldo, fornecedor e anuncio e a VARIANTE — a
+// familia nao tem nenhum desses. Uma lista de familias respondia "quantos
+// catalogos temos", que ninguem pergunta, em vez de "o que esta a venda e como
+// esta", que e a unica pergunta que se faz aqui todo dia. E o mesmo arranjo do
+// Bling, onde o produto pai nao tem estoque e a listagem agrupa as filhas.
 
 const SITUACOES = [
   { v: "ativo", r: "Ativos" },
   { v: "inativo", r: "Inativos" },
   { v: "sem_custo", r: "Sem custo" },
+  { v: "sem_fornecedor", r: "Sem fornecedor" },
   { v: "esgotado", r: "Esgotado e visivel" },
 ];
 
@@ -47,7 +48,7 @@ function rotulo(familia: string, atributos: any): string {
 export default async function Produtos({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; canal?: string; situacao?: string; modo?: string }>;
+  searchParams: Promise<{ q?: string; canal?: string; situacao?: string; modo?: string; forn?: string }>;
 }) {
   // Estado do filtro na URL, nunca em estado de componente (SPEC/08 §1):
   // o link e compartilhavel e o botao voltar funciona.
@@ -56,6 +57,7 @@ export default async function Produtos({
   const canal = (sp.canal ?? "").trim();
   const situacao = (sp.situacao ?? "").trim();
   const modo = (sp.modo ?? "").trim();
+  const forn = (sp.forn ?? "").trim();
 
   const cond: string[] = [];
   const args: unknown[] = [];
@@ -75,9 +77,14 @@ export default async function Produtos({
     args.push(modo);
     cond.push(`v.modo_entrega = $${args.length}::modo_entrega`);
   }
+  if (forn) {
+    args.push(forn);
+    cond.push(`v.fornecedor_id = $${args.length}::uuid`);
+  }
   if (situacao === "ativo") cond.push("v.ativo and p.ativo");
   if (situacao === "inativo") cond.push("(not v.ativo or not p.ativo)");
   if (situacao === "sem_custo") cond.push("cv.fonte_custo = 'indisponivel'");
+  if (situacao === "sem_fornecedor") cond.push("v.fornecedor_id is null");
   if (situacao === "esgotado") {
     cond.push(
       `v.modo_entrega = 'estoque' and cv.disponivel = 0
@@ -90,6 +97,7 @@ export default async function Produtos({
     `select p.handle, p.nome as familia, p.ativo as familia_ativa,
             v.sku, v.atributos, v.ativo, v.custo::text as custo, v.custo_moeda,
             v.modo_entrega::text as modo, v.publicavel_marketplace,
+            f.nome as fornecedor, f.ativo as fornecedor_ativo,
             coalesce(cv.disponivel, 0)::int as disponivel,
             cv.fonte_custo,
             (select string_agg(distinct c2.codigo, ', ' order by c2.codigo)
@@ -97,13 +105,17 @@ export default async function Produtos({
               where cv2.variante_id = v.id and cv2.visivel) as canais
        from variante v
        join produto p on p.id = v.produto_id
+       left join fornecedor f on f.id = v.fornecedor_id
        left join custo_variante cv on cv.variante_id = v.id
        ${onde}
       order by p.nome, v.sku`,
     args,
   );
 
-  const canais = await db.query("select codigo from canal where ativo order by codigo");
+  const [canais, fornecedores] = await Promise.all([
+    db.query("select codigo from canal where ativo order by codigo"),
+    db.query("select id, nome from fornecedor order by nome"),
+  ]);
 
   // "Esgotado no ar" so vale para quem tem prateleira: item de operadora nao
   // tem saldo por desenho, e contar o zero dele encheria a tela de alarme falso.
@@ -111,6 +123,7 @@ export default async function Produtos({
     (x: any) => x.modo === "estoque" && x.disponivel === 0 && x.canais,
   ).length;
   const semCusto = r.rows.filter((x: any) => x.fonte_custo === "indisponivel").length;
+  const semForn = r.rows.filter((x: any) => !x.fornecedor).length;
 
   let familiaAtual = "";
 
@@ -121,8 +134,8 @@ export default async function Produtos({
           <div>
             <h1>Produtos</h1>
             <p>
-              Cada linha e um item vendavel, com seu SKU, seu saldo e seu preco. O nome em
-              destaque so agrupa — quem tem numero e o SKU.
+              Cada linha e um item vendavel, com seu SKU, seu saldo, seu preco e de quem ele
+              vem. O nome em destaque so agrupa — quem tem numero e o SKU.
             </p>
           </div>
           <Link href="/painel/produtos/novo" className="botao">+ Incluir</Link>
@@ -137,6 +150,16 @@ export default async function Produtos({
         </div>
       ) : null}
 
+      {semForn > 0 ? (
+        <div className="cartao perigo" style={{ marginBottom: 14 }}>
+          <div className="rot">Sem fornecedor</div>
+          <div className="val">{semForn}</div>
+          <div className="pe">
+            Custo sem dono. <Link href="/painel/fornecedores">Amarrar agora →</Link>
+          </div>
+        </div>
+      ) : null}
+
       {semCusto > 0 ? (
         <div className="cartao perigo" style={{ marginBottom: 18 }}>
           <div className="rot">Sem custo</div>
@@ -147,21 +170,25 @@ export default async function Produtos({
 
       {/* Formulario GET: o filtro vira URL sozinho, sem JavaScript nenhum. */}
       <form method="get" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
-        <input type="search" name="q" defaultValue={q} placeholder="produto ou SKU" style={{ flex: "2 1 200px", width: "auto" }} />
-        <select name="modo" defaultValue={modo} style={{ flex: "1 1 170px", width: "auto" }}>
+        <input type="search" name="q" defaultValue={q} placeholder="produto ou SKU" style={{ flex: "2 1 180px", width: "auto" }} />
+        <select name="forn" defaultValue={forn} style={{ flex: "1 1 160px", width: "auto" }}>
+          <option value="">Todos os fornecedores</option>
+          {fornecedores.rows.map((f: any) => (<option key={f.id} value={f.id}>{f.nome}</option>))}
+        </select>
+        <select name="modo" defaultValue={modo} style={{ flex: "1 1 160px", width: "auto" }}>
           <option value="">Todos os modos</option>
           {MODOS_FILTRO.map((m) => (<option key={m.v} value={m.v}>{m.r}</option>))}
         </select>
-        <select name="canal" defaultValue={canal} style={{ flex: "1 1 150px", width: "auto" }}>
+        <select name="canal" defaultValue={canal} style={{ flex: "1 1 140px", width: "auto" }}>
           <option value="">Todos os canais</option>
           {canais.rows.map((c: any) => (<option key={c.codigo} value={c.codigo}>{c.codigo}</option>))}
         </select>
-        <select name="situacao" defaultValue={situacao} style={{ flex: "1 1 170px", width: "auto" }}>
+        <select name="situacao" defaultValue={situacao} style={{ flex: "1 1 160px", width: "auto" }}>
           <option value="">Todas as situacoes</option>
           {SITUACOES.map((s) => (<option key={s.v} value={s.v}>{s.r}</option>))}
         </select>
         <button type="submit">Filtrar</button>
-        {q || canal || situacao || modo ? (
+        {q || canal || situacao || modo || forn ? (
           <Link href="/painel/produtos" className="botao secundario" style={{ display: "inline-flex", alignItems: "center" }}>Limpar</Link>
         ) : null}
       </form>
@@ -177,6 +204,7 @@ export default async function Produtos({
             <thead>
               <tr style={{ textAlign: "left", color: "var(--texto-fraco)", fontSize: "0.72rem" }}>
                 <th style={{ padding: "12px 16px", fontWeight: 600 }}>PRODUTO</th>
+                <th style={{ padding: "12px 16px", fontWeight: 600 }}>FORNECEDOR</th>
                 <th style={{ padding: "12px 16px", fontWeight: 600 }}>ENTREGA</th>
                 <th style={{ padding: "12px 16px", fontWeight: 600, textAlign: "right" }}>SALDO</th>
                 <th style={{ padding: "12px 16px", fontWeight: 600, textAlign: "right" }}>CUSTO</th>
@@ -203,6 +231,16 @@ export default async function Produtos({
                       <br />
                       <code style={{ fontSize: "0.75rem", color: "var(--texto-fraco)" }}>{v.sku}</code>
                       {v.ativo ? null : (<span style={{ color: "var(--texto-fraco)", fontSize: "0.78rem" }}> · inativo</span>)}
+                    </td>
+                    <td style={{ padding: "12px 16px", fontSize: "0.86rem" }}>
+                      {v.fornecedor ? (
+                        <>
+                          {v.fornecedor}
+                          {v.fornecedor_ativo ? null : (<span style={{ color: "var(--texto-fraco)", fontSize: "0.76rem" }}> · inativo</span>)}
+                        </>
+                      ) : (
+                        <Link href="/painel/fornecedores" style={{ color: "var(--alerta)" }}>sem fornecedor</Link>
+                      )}
                     </td>
                     <td style={{ padding: "12px 16px", color: "var(--texto-fraco)", fontSize: "0.82rem" }}>
                       {ROTULO_MODO[v.modo] ?? v.modo}
