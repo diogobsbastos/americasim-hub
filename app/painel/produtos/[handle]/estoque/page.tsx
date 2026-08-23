@@ -3,6 +3,7 @@ import { db } from "../../../../../lib/db";
 import { usuarioDaSessao } from "../../../../../lib/painel/sessao";
 import FormLote from "./FormLote";
 import ListaCodigos, { type LinhaEstoque } from "./ListaCodigos";
+import Abas from "../Abas";
 
 export const dynamic = "force-dynamic";
 
@@ -139,14 +140,20 @@ export default async function Estoque({
   return (
     <>
       <div className="pn-cabeca">
-        <h1>Estoque — {prod.nome}</h1>
+        <h1>{prod.nome}</h1>
         <p>
-          Cada código é uma linha própria no banco, nunca um contador. É isso que impede dois
-          clientes receberem o mesmo eSIM — e por isso retirar do estoque é escolher{" "}
-          <b>qual</b>, não digitar quantos. ·{" "}
-          <Link href={`/painel/produtos/${prod.handle}`}>voltar para o produto</Link>
+          <code>{prod.handle}</code> · <Link href="/painel/produtos">voltar para a lista</Link> ·{" "}
+          <Link href="/painel/estoque/alertas">configurar alertas de mínimo</Link>
         </p>
       </div>
+
+      <Abas handle={prod.handle} atual="estoque" />
+
+      <p style={{ color: "var(--texto-fraco)", margin: "0 0 22px", fontSize: "0.9rem" }}>
+        Cada código é uma linha própria no banco, nunca um contador. É isso que impede dois
+        clientes receberem o mesmo eSIM — e por isso retirar do estoque é escolher <b>qual</b>,
+        não digitar quantos.
+      </p>
 
       {/* ------------------------------------------------------- resumo */}
       <div className="cartao" style={{ padding: 0, overflowX: "auto", marginBottom: 26 }}>
