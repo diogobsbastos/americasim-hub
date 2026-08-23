@@ -12,12 +12,12 @@ export const runtime = "nodejs";
 // fala com a API deles e nao se entrega nada: grava uma linha e responde.
 // Quem trabalha e o worker, lendo `evento_saida`.
 //
-// AUTENTICACAO: ao contrario da Stripe, o ML NAO assina a notificacao. Sem
-// nenhuma defesa, qualquer um na internet manda um JSON e faz o worker ir
-// buscar pedidos que nao existem. Duas camadas, nesta ordem:
-//   1. segredo compartilhado na URL (`?k=`), se ML_WEBHOOK_SEGREDO existir;
-//   2. senao, a lista oficial de IPs de origem do ML.
-// Nunca aberto: sem segredo configurado E vindo de IP desconhecido, recusa.
+// AUTENTICACAO: ao contrario da Stripe, o ML NAO assina a notificacao. Duas
+// defesas, e basta UMA passar:
+//   - segredo compartilhado em `?k=`, se ML_WEBHOOK_SEGREDO estiver no ambiente;
+//   - a lista oficial de IPs de origem do ML.
+// E "ou", e nao "e", de proposito: exigir o segredo obrigaria a URL cadastrada
+// no DevCenter a carrega-lo, e cadastrar viraria tarefa de quem tem o arquivo.
 //
 // IDEMPOTENCIA: o ML reenvia por 1 hora, ate 8 tentativas. O `agregado_id` sai
 // de topico+resource, entao a reentrega cai na MESMA chave e a linha repetida e
@@ -36,23 +36,28 @@ const IPS_ML = new Set([
 // dar certo, e afogaria a fila dos que importam.
 const TOPICOS = new Set(["orders_v2", "items", "messages", "shipments", "payments"]);
 
+// O IP DE VERDADE, e nao o que o cliente disse ser.
+//
+// O Nginx usa `$proxy_add_x_forwarded_for`, que ACRESCENTA o remote_addr no FIM
+// da lista. Logo o primeiro item e o que veio de fora — forjavel por qualquer
+// um — e o ultimo e o que o proxy carimbou. Ler o primeiro (como eu fazia)
+// deixava a lista de IPs valer nada: bastava mandar o cabecalho pronto.
 function ipDeOrigem(req: Request): string {
-  const xff = req.headers.get("x-forwarded-for") ?? "";
-  // O primeiro da lista e o cliente; o resto sao os proxies pelo caminho.
-  return (xff.split(",")[0] ?? "").trim();
+  const real = (req.headers.get("x-real-ip") ?? "").trim();
+  if (real) return real;
+  const xff = (req.headers.get("x-forwarded-for") ?? "").split(",");
+  return (xff[xff.length - 1] ?? "").trim();
 }
 
 function autorizado(req: Request): { ok: boolean; motivo: string } {
   const segredo = process.env.ML_WEBHOOK_SEGREDO ?? "";
   if (segredo) {
     const k = new URL(req.url).searchParams.get("k") ?? "";
-    // Comparacao de tamanho antes evita vazar o comprimento por tempo de resposta.
     if (k.length === segredo.length && k === segredo) return { ok: true, motivo: "segredo" };
-    return { ok: false, motivo: "segredo invalido" };
   }
   const ip = ipDeOrigem(req);
   if (IPS_ML.has(ip)) return { ok: true, motivo: `ip ${ip}` };
-  return { ok: false, motivo: `ip nao reconhecido (${ip || "sem x-forwarded-for"})` };
+  return { ok: false, motivo: `sem segredo valido e ip desconhecido (${ip || "sem cabecalho de origem"})` };
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -67,7 +72,6 @@ export async function POST(req: Request): Promise<Response> {
   try {
     corpo = await req.json();
   } catch {
-    // Corpo torto nao vira retentativa eterna: aceita, registra e segue.
     console.error("ml.webhook: corpo nao e JSON");
     return Response.json({ recebido: true, detalhe: "corpo invalido" });
   }
@@ -86,10 +90,9 @@ export async function POST(req: Request): Promise<Response> {
   try {
     // UMA consulta, sem rede: e o que cabe dentro de 500 ms com folga.
     //
-    // `md5(...)::uuid` da a mesma chave para a mesma notificacao reentregue.
     // O `where not exists` so olha os NAO publicados: se o mesmo pedido mudar
     // de estado amanha e o ML avisar de novo, aquilo e evento novo e deve
-    // entrar — o que nao pode entrar duas vezes e a retentativa da mesma coisa
+    // entrar. O que nao pode entrar duas vezes e a retentativa da mesma coisa
     // enquanto a primeira ainda nem foi processada.
     const r = await db.query(
       `insert into evento_saida (agregado, agregado_id, tipo, payload)
@@ -110,13 +113,13 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ recebido: true, id: String(r.rows[0].id) });
   } catch (e: any) {
     // Falha nossa: devolver erro faz o ML tentar de novo, e e isso mesmo que
-    // queremos aqui — a notificacao ainda nao foi guardada em lugar nenhum.
+    // queremos — a notificacao ainda nao foi guardada em lugar nenhum.
     console.error("ml.webhook: falha ao enfileirar:", e?.message ?? e);
     return Response.json({ erro: "falha temporaria" }, { status: 503 });
   }
 }
 
-// O ML nao usa GET, mas a doc oferece um teste de endpoint e da conforto poder
+// O ML nao usa GET, mas a doc oferece um teste de endpoint, e da conforto poder
 // abrir a URL no navegador e ver que ela existe sem enfileirar nada.
 export async function GET(req: Request): Promise<Response> {
   const permissao = autorizado(req);
