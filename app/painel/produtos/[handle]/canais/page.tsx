@@ -3,6 +3,8 @@ import { db } from "../../../../../lib/db";
 import { usuarioDaSessao } from "../../../../../lib/painel/sessao";
 import Matriz, { type Canal, type Linha } from "../Matriz";
 import Abas from "../Abas";
+import Vinculos from "./Vinculos";
+import type { CanalMarketplace, ItemVinculo, SkuVinculo } from "./tipos";
 
 export const dynamic = "force-dynamic";
 
@@ -42,9 +44,10 @@ export default async function CanaisDoProduto({ params }: { params: Promise<{ ha
   }
   const prod = p.rows[0];
 
-  const [vars, cans, cels, precos, param, hist] = await Promise.all([
+  const [vars, cans, cels, precos, param, hist, mkts, itens] = await Promise.all([
     db.query(
       `select v.id, v.sku, v.atributos, v.custo::text as custo, v.custo_moeda,
+              v.publicavel_marketplace, v.modo_entrega::text as modo,
               cv.disponivel, cv.fonte_custo, cv.custo_brl_efetivo::text as custo_brl
          from variante v join custo_variante cv on cv.variante_id = v.id
         where v.produto_id = $1 order by v.sku`,
@@ -69,6 +72,18 @@ export default async function CanaisDoProduto({ params }: { params: Promise<{ ha
          from preco pr join variante v on v.id = pr.variante_id join canal c on c.id = pr.canal_id
         where v.produto_id = $1 and pr.vigencia_fim is not null
         order by pr.vigencia_fim desc limit 12`,
+      [prod.id],
+    ),
+    // Canais de marketplace: a pergunta aqui e outra. Na vitrine se decide
+    // preco e visibilidade; no marketplace se decide QUAL anuncio e este item.
+    db.query(
+      "select id, codigo, nome, tipo::text as tipo from canal where ativo and tipo::text <> 'landing' order by codigo",
+    ),
+    db.query(
+      `select ci.canal_id, ci.variante_id, ci.id_externo, ci.categoria_externa,
+              ci.status::text as status, ci.ultimo_sync, ci.ultimo_erro
+         from canal_item ci join variante v on v.id = ci.variante_id
+        where v.produto_id = $1`,
       [prod.id],
     ),
   ]);
@@ -97,6 +112,21 @@ export default async function CanaisDoProduto({ params }: { params: Promise<{ ha
     };
   });
 
+  const marketplaces: CanalMarketplace[] = mkts.rows.map((c: any) => ({
+    id: c.id, codigo: c.codigo, nome: c.nome, tipo: c.tipo,
+  }));
+  const skusVinculo: SkuVinculo[] = vars.rows.map((v: any) => ({
+    varianteId: v.id, sku: v.sku, rotulo: rotuloVariante(v.atributos),
+    publicavel: v.publicavel_marketplace, modo: v.modo,
+  }));
+  const itensVinculo: ItemVinculo[] = itens.rows.map((i: any) => ({
+    canalId: i.canal_id, varianteId: i.variante_id,
+    idExterno: i.id_externo ?? "", categoria: i.categoria_externa ?? "",
+    status: i.status,
+    ultimoSync: i.ultimo_sync ? new Date(i.ultimo_sync).toISOString() : null,
+    ultimoErro: i.ultimo_erro ?? null,
+  }));
+
   return (
     <>
       <div className="pn-cabeca">
@@ -122,9 +152,17 @@ export default async function CanaisDoProduto({ params }: { params: Promise<{ ha
         />
       )}
 
+      <Vinculos
+        handle={prod.handle}
+        canais={marketplaces}
+        skus={skusVinculo}
+        itens={itensVinculo}
+        podeMexer={podeVitrine}
+      />
+
       {hist.rows.length > 0 ? (
         <>
-          <h2 style={{ fontSize: "1.05rem", margin: "30px 0 4px" }}>Preços anteriores</h2>
+          <h2 style={{ fontSize: "1.05rem", margin: "34px 0 4px" }}>Preços anteriores</h2>
           <p style={{ color: "var(--texto-fraco)", margin: "0 0 12px", fontSize: "0.88rem" }}>
             O histórico existe porque trocar preço fecha o antigo em vez de apagar.
           </p>
