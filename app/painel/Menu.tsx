@@ -6,22 +6,19 @@ import { usePathname } from "next/navigation";
 // Ordem de construcao da SPEC/08 §11. O que ainda nao existe aparece marcado
 // "em breve" em vez de sumir: o menu tambem serve para você saber o que falta.
 //
-// Estoque e area PROPRIA, e nao so uma aba dentro de cada produto. Enquanto ha
-// um produto so, esconder o estoque la dentro parece organizado; com dez
-// fornecedores e trinta variantes, ninguem entra produto por produto para
-// descobrir o que esta acabando.
+// Estoque, Fornecedores e Alertas sao areas PROPRIAS, e nao abas escondidas
+// dentro do produto. Ele reclamou, com razao, de olhar o menu e concluir que o
+// sistema nao existia. Area que a operacao usa todo dia tem que estar no menu.
 //
-// Fornecedores segue a mesma regra e pelo mesmo motivo (22/08/2026): ele
-// reclamou de olhar o menu e concluir que o sistema nao existia. Area que a
-// operacao usa todo dia tem que estar no menu.
+// Estoque casa EXATO: "/painel/estoque" e prefixo de "/painel/estoque/alertas",
+// e sem isso os dois itens acenderiam juntos.
 //
-// Dinheiro e grupo proprio desde 21/08/2026. Pagamentos estava dentro de
-// Conexoes porque as duas sao "ligacoes com o mundo" — mas para quem opera sao
-// coisas diferentes: Conexoes e ONDE A GENTE VENDE, Pagamentos e COMO A GENTE
-// RECEBE.
+// Dinheiro e grupo proprio desde 21/08/2026: Conexoes e ONDE A GENTE VENDE,
+// Pagamentos e COMO A GENTE RECEBE. Quem entra para resolver dinheiro nao quer
+// passar por anuncio.
 //
-// Vitrines vem ANTES de Conexoes no grupo Canais: a loja propria e o canal que
-// se abre todo dia para conferir; Conexoes trata dos marketplaces.
+// Vitrines vem antes de Conexoes no grupo Canais: a loja propria se abre todo
+// dia para conferir; Conexoes trata dos marketplaces.
 const AREAS = [
   {
     grupo: "Operação",
@@ -29,7 +26,8 @@ const AREAS = [
       { href: "/painel", rotulo: "Painel", pronto: true, exato: true },
       { href: "/painel/vendas", rotulo: "Vendas", pronto: true, exato: false },
       { href: "/painel/produtos", rotulo: "Produtos", pronto: true, exato: false },
-      { href: "/painel/estoque", rotulo: "Estoque", pronto: true, exato: false },
+      { href: "/painel/estoque", rotulo: "Estoque", pronto: true, exato: true },
+      { href: "/painel/estoque/alertas", rotulo: "Alertas de estoque", pronto: true, exato: false },
       { href: "/painel/fornecedores", rotulo: "Fornecedores", pronto: true, exato: false },
     ],
   },
