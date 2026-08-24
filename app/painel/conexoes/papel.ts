@@ -24,11 +24,14 @@ export async function definirPapelTeste(_a: EstadoPapel, form: FormData): Promis
   if (!id) return { erro: "Usuario nao informado.", ok: "" };
   if (!VALIDOS.includes(papel)) return { erro: "Papel invalido.", ok: "" };
 
+  const cli: any = await db.connect();
   try {
+    await cli.query("begin");
+
     // Reescreve o array inteiro trocando SO o item do id pedido. `jsonb_set`
     // direto num indice exigiria saber a posicao, e posicao muda quando alguem
     // cria outro usuario.
-    const r = await db.query(
+    const r = await cli.query(
       `update canal
           set config = jsonb_set(
                 config, '{usuarios_teste}',
@@ -43,10 +46,30 @@ export async function definirPapelTeste(_a: EstadoPapel, form: FormData): Promis
           and jsonb_typeof(config->'usuarios_teste') = 'array'`,
       [id, papel],
     );
-    if (r.rowCount === 0) return { erro: "Nao encontrei a lista de usuarios de teste.", ok: "" };
+
+    // E no cofre tambem. A etiqueta e barata de refazer, mas se ela so existisse
+    // no config, a tela passaria a ler do cofre e mostraria "indefinido" para
+    // quem ja foi marcado — exatamente o tipo de divergencia silenciosa entre
+    // duas copias que faz ninguem confiar em nenhuma das duas.
+    const t = await cli.query(
+      `update usuario_teste_ml set papel = $2
+        where usuario_id = $1
+          and canal_id in (select id from canal where tipo = 'mercadolivre'::tipo_canal)`,
+      [id, papel || "indefinido"],
+    );
+
+    if (r.rowCount === 0 && t.rowCount === 0) {
+      await cli.query("rollback");
+      return { erro: "Nao encontrei esse usuario de teste.", ok: "" };
+    }
+
+    await cli.query("commit");
   } catch (e) {
+    await cli.query("rollback").catch(() => {});
     console.error("definirPapelTeste:", e);
     return { erro: "Falha ao gravar. Nada foi alterado.", ok: "" };
+  } finally {
+    cli.release();
   }
 
   await auditar("conexao.teste.papel", {
