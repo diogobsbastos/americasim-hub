@@ -48,6 +48,7 @@ export default async function Conexoes({
     site: String(x.site ?? "MLB"),
     email: String(x.email ?? ""),
     criadoEm: String(x.criado_em ?? ""),
+    papel: String(x.papel ?? ""),
   }));
 
   return (
