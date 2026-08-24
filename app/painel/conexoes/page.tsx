@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { db } from "../../../lib/db";
 import { CONECTORES, estadoDoConector } from "../../../lib/conectores";
+import { listarUsuariosTeste } from "../../../lib/usuario-teste";
 import { usuarioDaSessao } from "../../../lib/painel/sessao";
 import Cartao from "./Cartao";
 import UsuariosTeste, { type LinhaUsuarioTeste } from "./UsuariosTeste";
@@ -36,20 +37,28 @@ export default async function Conexoes({
 
   const estados = await Promise.all(CONECTORES.map((c) => estadoDoConector(c)));
 
-  // Os usuarios de teste vivem no `config` do canal, que e onde a acao de criar
-  // ja os grava. Le so o que a tela mostra: a SENHA nao passa por aqui — ela
-  // continua atras do botao de revelar, que tem acao propria e auditada.
-  const ut = await db.query(
-    "select coalesce(config->'usuarios_teste', '[]'::jsonb) as lista from canal where tipo = 'mercadolivre'::tipo_canal limit 1",
+  // Os usuarios de teste vem de `listarUsuariosTeste`, que le o cofre
+  // (`usuario_teste_ml`) e o `config` do canal e faz o cofre mandar no conflito.
+  // Ler o config direto — que era o que esta tela fazia — significa mostrar
+  // lista vazia quando alguma rota reescreve o jsonb, que foi exatamente o que
+  // aconteceu em 24/08.
+  //
+  // A SENHA nao passa por aqui: continua atras do botao de revelar, que tem
+  // acao propria e auditada.
+  const canal = await db.query(
+    "select id from canal where tipo = 'mercadolivre'::tipo_canal limit 1",
   );
-  const usuariosTeste: LinhaUsuarioTeste[] = (ut.rows[0]?.lista ?? []).map((x: any) => ({
-    id: String(x.id ?? ""),
-    apelido: String(x.apelido ?? ""),
-    site: String(x.site ?? "MLB"),
-    email: String(x.email ?? ""),
-    criadoEm: String(x.criado_em ?? ""),
-    papel: String(x.papel ?? ""),
-  }));
+  const canalId: string | null = canal.rows[0]?.id ?? null;
+  const usuariosTeste: LinhaUsuarioTeste[] = canalId
+    ? (await listarUsuariosTeste(canalId)).map((x) => ({
+        id: x.id,
+        apelido: x.apelido,
+        site: x.site || "MLB",
+        email: x.email,
+        criadoEm: x.criadoEm,
+        papel: x.papel,
+      }))
+    : [];
 
   return (
     <>
@@ -118,9 +127,10 @@ export default async function Conexoes({
       </div>
 
       {/* FORA do cartao de proposito: usuario de teste e coisa do CANAL, nao da
-          credencial. Eles sobrevivem a desconectar e reconectar, e escondidos
-          dentro do passo "3. Autorizar" sumiriam justo quando fazem falta —
-          antes de existir uma conexao boa. */}
+          credencial. Eles sobrevivem a desconectar e reconectar — agora de
+          verdade: moram no cofre `usuario_teste_ml`, que a rota de autorizacao
+          nao toca. Escondidos dentro do passo "3. Autorizar" sumiriam justo
+          quando fazem falta, antes de existir uma conexao boa. */}
       <div style={{ marginTop: 22 }}>
         <UsuariosTeste tipo="mercadolivre" usuarios={usuariosTeste} podeMexer={!!podeMexer} />
       </div>
