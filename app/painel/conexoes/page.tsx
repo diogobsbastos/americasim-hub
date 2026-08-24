@@ -1,7 +1,9 @@
 import { headers } from "next/headers";
+import { db } from "../../../lib/db";
 import { CONECTORES, estadoDoConector } from "../../../lib/conectores";
 import { usuarioDaSessao } from "../../../lib/painel/sessao";
 import Cartao from "./Cartao";
+import UsuariosTeste, { type LinhaUsuarioTeste } from "./UsuariosTeste";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,20 @@ export default async function Conexoes({
   const base = `${proto}://${host}`;
 
   const estados = await Promise.all(CONECTORES.map((c) => estadoDoConector(c)));
+
+  // Os usuarios de teste vivem no `config` do canal, que e onde a acao de criar
+  // ja os grava. Le so o que a tela mostra: a SENHA nao passa por aqui — ela
+  // continua atras do botao de revelar, que tem acao propria e auditada.
+  const ut = await db.query(
+    "select coalesce(config->'usuarios_teste', '[]'::jsonb) as lista from canal where tipo = 'mercadolivre'::tipo_canal limit 1",
+  );
+  const usuariosTeste: LinhaUsuarioTeste[] = (ut.rows[0]?.lista ?? []).map((x: any) => ({
+    id: String(x.id ?? ""),
+    apelido: String(x.apelido ?? ""),
+    site: String(x.site ?? "MLB"),
+    email: String(x.email ?? ""),
+    criadoEm: String(x.criado_em ?? ""),
+  }));
 
   return (
     <>
@@ -98,6 +114,14 @@ export default async function Conexoes({
             }))}
           />
         ))}
+      </div>
+
+      {/* FORA do cartao de proposito: usuario de teste e coisa do CANAL, nao da
+          credencial. Eles sobrevivem a desconectar e reconectar, e escondidos
+          dentro do passo "3. Autorizar" sumiriam justo quando fazem falta —
+          antes de existir uma conexao boa. */}
+      <div style={{ marginTop: 22 }}>
+        <UsuariosTeste tipo="mercadolivre" usuarios={usuariosTeste} podeMexer={!!podeMexer} />
       </div>
 
       <p
