@@ -101,10 +101,26 @@ export async function GET(req: Request, ctx: { params: Promise<{ tipo: string }>
     conta = { usuario_marketplace: dados.user_id ?? null };
   }
 
+  // MESCLA, nao substitui.
+  //
+  // Aqui ja se perdeu dado de verdade: em 24/08 esta linha dizia
+  // `config = excluded.config`, e reconectar o canal TROCOU o jsonb inteiro
+  // pelo objeto `conta` montado acima. Levou junto `config->'usuarios_teste'`
+  // — os usuarios de teste do Mercado Livre e as senhas deles, que so existem
+  // no momento da criacao e nao podem ser lidas de volta da API. Uma das duas
+  // senhas nunca mais voltou.
+  //
+  // O operador `||` do jsonb faz a mescla rasa: as chaves que a autorizacao
+  // conhece (usuario_marketplace, apelido, site, teste) sao sobrescritas com o
+  // valor novo; qualquer outra chave que ja morava no config e preservada.
+  // Regra geral: rota que so sabe de UMA parte do config nunca escreve o
+  // config inteiro.
   const canalQ = await db.query(
     `insert into canal (codigo, nome, tipo, moeda, ativo, config)
      values ($1, $2, $3::tipo_canal, 'BRL', true, $4::jsonb)
-     on conflict (codigo) do update set ativo = true, config = excluded.config
+     on conflict (codigo) do update set
+       ativo = true,
+       config = coalesce(canal.config, '{}'::jsonb) || excluded.config
      returning id`,
     [c.tipo, c.nome, c.tipo, JSON.stringify(conta)],
   );
