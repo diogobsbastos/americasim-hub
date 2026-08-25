@@ -53,6 +53,11 @@ export const CONECTORES: Conector[] = [
     // Da para construir e provar TUDO agora: o ML tem usuarios de teste (ate 10,
     // `POST /users/test_user`) que publicam e compram entre si, sem exigir CNPJ.
     // O CNPJ trava vender de verdade, nao integrar.
+    //
+    // O ML NAO tem sandbox separado: o "ambiente de teste" e a producao com
+    // usuarios marcados como teste. A aplicacao (client_id) pertence sempre a
+    // uma conta REAL — e e no DevCenter dessa conta que se liga notificacao e
+    // permissao. Editar a aplicacao nao toca a loja: nao publica, nao vende.
     disponivel: true,
     paramClientId: "mercadolivre.client_id",
     envSecret: "ML_CLIENT_SECRET",
@@ -86,15 +91,22 @@ export const CONECTORES: Conector[] = [
         { nome: "Usuarios", nivel: "Leitura e escrita", porque: "E como o hub sabe de qual conta ele fala.", essencial: true },
         { nome: "Publicacao e sincronizacao", nivel: "Leitura e escrita", porque: "Criar, atualizar e pausar anuncio. Sem isso nao existe integracao.", essencial: true },
         { nome: "Venda e envios de um produto", nivel: "Leitura e escrita", porque: "Ler o pedido pago e o que dispara a entrega do eSIM.", essencial: true },
-        { nome: "Comunicacoes pre e pos-vendas", nivel: "Leitura", porque: "Ver pergunta de comprador. Escrita nao: o hub nao responde ninguem sozinho.", essencial: false },
+        // 25/08: sem escrita, o POST em /messages/packs volta 403 do PolicyAgent
+        // (PA_UNAUTHORIZED_RESULT_FROM_POLICIES) e o codigo do eSIM nao chega
+        // ao comprador. E o unico canal de entrega dentro do ML.
+        { nome: "Comunicacoes pre e pos-vendas", nivel: "Leitura e escrita", porque: "O codigo do eSIM vai pela conversa do pedido. Sem escrita, o ML barra a mensagem (403 PolicyAgent).", essencial: true },
         { nome: "Metricas do negocio", nivel: "Leitura", porque: "Alimenta a tabela metrica_canal.", essencial: false },
         { nome: "Publicidade de um produto", nivel: "Sem acesso", porque: "Nao criamos campanha.", essencial: false },
         { nome: "Faturamento de uma venda", nivel: "Sem acesso", porque: "Nota fiscal depende de CNPJ, que ainda nao temos.", essencial: false },
         { nome: "Promocoes, cupons e descontos", nivel: "Sem acesso", porque: "Nao usamos.", essencial: false },
       ],
+      // O receptor existe desde 24/08: /v1/webhooks/mercadolivre, atras de
+      // americasim.com.br. A URL de retorno de chamada no DevCenter tem que ser
+      // exatamente https://americasim.com.br/v1/webhooks/mercadolivre.
       topicos: [
-        { nome: "Orders_v2", ligar: false, quando: "quando o receptor de avisos existir", porque: "Pedido pago — e o que dispara a entrega." },
-        { nome: "Items", ligar: false, quando: "quando o receptor de avisos existir", porque: "Alguem pausou ou alterou o anuncio por fora do hub." },
+        { nome: "Orders_v2", ligar: true, quando: "agora", porque: "Pedido pago — e o que dispara a entrega. Sem este topico a venda nao entra no hub." },
+        { nome: "Messages", ligar: true, quando: "agora", porque: "Comprador escreveu na conversa do pedido." },
+        { nome: "Items", ligar: false, quando: "depois", porque: "Alguem pausou ou alterou o anuncio por fora do hub." },
         { nome: "Questions", ligar: false, quando: "depois", porque: "Pergunta de comprador no anuncio." },
         { nome: "Items Prices", ligar: false, quando: "depois", porque: "Preco mudou por fora do hub." },
         { nome: "Orders Feedback / Quotations / Stock-Locations / User Products Families", ligar: false, quando: "nunca", porque: "Nao se aplicam a eSIM." },
@@ -194,11 +206,20 @@ export async function estadoDoConector(c: Conector): Promise<EstadoConector> {
            from canal_item where canal_id = $1`,
         [canalId],
       ),
+      // So o que e ATUAL: depois da ultima autorizacao bem-sucedida (reconectar
+      // com permissao nova limpa o que a permissao velha causou) e dentro de
+      // 24 h. Antes era "os 5 ultimos de sempre", e erro de ontem ficava no
+      // cartao para sempre.
       db.query(
         `select quando, acao, detalhe from log_sync
           where canal_id = $1 and not sucesso
+            and quando > greatest(
+              now() - interval '24 hours',
+              coalesce((select max(quando) from log_auditoria
+                         where acao = 'conexao.autorizar.sucesso'
+                           and depois->>'conector' = $2), now() - interval '24 hours'))
           order by quando desc limit 5`,
-        [canalId],
+        [canalId, c.tipo],
       ),
     ]);
     itens = {
