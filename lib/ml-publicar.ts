@@ -7,22 +7,19 @@ import { mlFetch, tokenDoCanal } from "./mercadolivre";
 //
 // A primeira versao morava dentro de uma rota interna, alcancavel so pelo
 // worker e por curl no terminal. Publicar produto e trabalho de quem opera a
-// loja, e trabalho de quem opera tem que ser botao na tela. As duas portas
-// (tela e rota) chamam as funcoes daqui, entao nao ha como uma publicar de um
-// jeito e a outra de outro.
+// loja, e trabalho de quem opera tem que ser botao na tela.
 //
 // O QUE O ML COBRA, E ONDE ISSO MORDE
 //
 // Cada categoria tem sua lista de atributos. Tres grupos importam:
-//   - OBRIGATORIOS: sem eles o ML recusa a publicacao;
-//   - FORMADORES DE VARIACAO: preenchidos, fazem o ML criar uma "grade" e
-//     mover o estoque para dentro dela;
+//   - OBRIGATORIOS: sem eles o ML recusa;
+//   - FORMADORES DE VARIACAO: preenchidos, fazem o ML criar uma grade e mover
+//     o estoque para dentro dela. Um SKU nosso e um anuncio la, entao esses
+//     NAO entram, venham de onde vierem;
 //   - o resto, opcional.
-// Um SKU nosso e um anuncio la. Entao formador de variacao NAO entra.
 //
-// E ha um quarto grupo que nao esta nessa lista: campos do CORPO do anuncio,
-// como `family_name`. Ler metade do contrato e pior que nao ler: da a sensacao
-// de ter conferido.
+// E ha o que nao esta em lista nenhuma: o formato do CORPO muda conforme a
+// categoria tenha ficha tecnica ou nao. Ver `montarCorpo` la embaixo.
 
 export type RegraAtributo = {
   id: string;
@@ -63,20 +60,17 @@ export async function regrasDaCategoria(
   });
 }
 
-// Formato unico, com todos os campos sempre presentes.
-//
-// Escrevi isto como uniao discriminada e o build parou em TS2339 — a mesma
-// pedra em que este projeto ja tinha tropecado horas antes, no porteiro das
-// rotas internas. Duas vezes no mesmo dia deixa de ser distracao e vira regra:
-// funcao interna aqui devolve UM formato. A elegancia de "quando deu certo nao
-// existe erro" custa uma rodada de build cada vez que alguem esquece.
+// Formato unico, com todos os campos sempre presentes. Escrevi isto como uniao
+// discriminada e o build parou em TS2339 — a mesma pedra do porteiro das rotas
+// internas, horas antes. Duas vezes no mesmo dia vira regra: funcao interna
+// aqui devolve UM formato.
 type RespostaPublicacao = { ok: boolean; item: any; erro: string };
 
 // O POST do anuncio, feito na mao para guardar a resposta CRUA.
 //
-// O mlFetch resume o erro em `message` + os `message`/`code` da lista `cause`.
-// Serve para quase tudo e falhou aqui: o ML devolveu "body.invalid_fields" com
-// causas sem `message`, e o resumo virou uma frase que nao diz nada. Numa
+// O mlFetch resume o erro em `message` mais os `message`/`code` da lista
+// `cause`. Serve para quase tudo e falhou aqui: o ML devolveu
+// "body.invalid_fields" com `cause` VAZIO e o motivo dentro de `error`. Numa
 // operacao que cria coisa na loja, a recusa inteira vale mais que a bonita.
 async function publicarItem(canalId: string, corpo: any): Promise<RespostaPublicacao> {
   const token = await tokenDoCanal(canalId);
@@ -109,8 +103,6 @@ async function publicarItem(canalId: string, corpo: any): Promise<RespostaPublic
     /* fica com o texto cru mesmo */
   }
 
-  // Tenta resumir; nao conseguindo, entrega o JSON inteiro. Feio e util vale
-  // mais que limpo e mudo.
   const causas: string[] = [];
   for (const c of dados?.cause ?? []) {
     const partes = [c?.code, c?.message, c?.department, c?.type]
@@ -119,8 +111,11 @@ async function publicarItem(canalId: string, corpo: any): Promise<RespostaPublic
     else if (c && typeof c === "object") causas.push(JSON.stringify(c));
   }
 
-  const titulo = String(dados?.message ?? dados?.error ?? `HTTP ${r.status}`);
-  const detalhe = causas.length ? causas.join(" | ") : bruto.slice(0, 900);
+  // `message` e o titulo ("body.invalid_fields"); `error` costuma trazer a
+  // frase que explica. Juntar os dois evita a mensagem que nao diz nada.
+  const titulo = String(dados?.message ?? `HTTP ${r.status}`);
+  const explicacao = String(dados?.error ?? "");
+  const detalhe = causas.length ? causas.join(" | ") : explicacao || bruto.slice(0, 900);
   return { ok: false, item: null, erro: `${titulo} — ${detalhe}` };
 }
 
@@ -145,6 +140,7 @@ export type ResultadoPublicacao = {
   anuncio?: string;
   permalink?: string;
   variacoes?: number;
+  comoFoi?: string;
 };
 
 export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPublicacao> {
@@ -209,30 +205,50 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
     }
   }
 
-  // `family_name` e o nome da LINHA de produto, nao do anuncio. O modelo ja e
-  // exatamente isso; o titulo cobre o caso de nao haver modelo.
+  // DOIS FORMATOS DE CORPO, e a categoria decide qual.
+  //
+  // Categoria comum: manda `title`, o anuncio se chama o que a gente escreveu.
+  // Categoria com FICHA TECNICA: quem monta o titulo e o ML, a partir de
+  // `family_name` e dos atributos — e mandar `title` junto e recusado com
+  // "The fields [title] are invalid for requested call".
+  //
+  // Nao ha lista publicada de quais categorias sao de cada tipo, e decorar uma
+  // seria descobrir por recusa toda vez que o ML mudasse. Entao: tenta do jeito
+  // comum e, se a recusa citar family_name, refaz do outro jeito.
   const familia = (entrada.get("MODEL") || p.titulo).slice(0, 60);
 
-  const corpo: any = {
-    title: p.titulo.slice(0, 60),
-    family_name: familia,
-    category_id: p.categoriaId,
-    price: Number(p.preco.toFixed(2)),
-    currency_id: "BRL",
-    available_quantity: Number(sku.livre ?? 0),
-    buying_mode: "buy_it_now",
-    listing_type_id: p.listingTypeId,
-    condition: "new",
-    pictures: fotos,
-    attributes: atributos,
-    // Sem `variations`, de proposito e por escrito.
-    shipping: { mode: "me2", local_pick_up: true, free_shipping: false },
-  };
-  if (sku.descricao) corpo.description = { plain_text: String(sku.descricao).slice(0, 6000) };
+  function montarCorpo(comFamilia: boolean): any {
+    const c: any = {
+      category_id: p.categoriaId,
+      price: Number(p.preco.toFixed(2)),
+      currency_id: "BRL",
+      available_quantity: Number(sku.livre ?? 0),
+      buying_mode: "buy_it_now",
+      listing_type_id: p.listingTypeId,
+      condition: "new",
+      pictures: fotos,
+      attributes: atributos,
+      // Sem `variations`, de proposito e por escrito.
+      shipping: { mode: "me2", local_pick_up: true, free_shipping: false },
+    };
+    if (comFamilia) c.family_name = familia;
+    else c.title = p.titulo.slice(0, 60);
+    if (sku.descricao) c.description = { plain_text: String(sku.descricao).slice(0, 6000) };
+    return c;
+  }
 
-  if (p.ensaio) return { ok: true, corpo, bloqueados };
+  const corpo = montarCorpo(false);
+  if (p.ensaio) return { ok: true, corpo, bloqueados, comoFoi: "com titulo" };
 
-  const resp = await publicarItem(p.canalId, corpo);
+  let comoFoi = "com titulo";
+  let usado = corpo;
+  let resp = await publicarItem(p.canalId, corpo);
+
+  if (!resp.ok && /family_name/i.test(resp.erro)) {
+    comoFoi = "com family_name (categoria de ficha tecnica — o titulo quem monta e o ML)";
+    usado = montarCorpo(true);
+    resp = await publicarItem(p.canalId, usado);
+  }
 
   if (!resp.ok) {
     // A recusa vai para log_sync ANTES de voltar para a tela: a mensagem na
@@ -240,9 +256,9 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
     await db.query(
       `insert into log_sync (canal_id, entidade, acao, sucesso, detalhe)
        values ($1, 'anuncio', 'ml.anuncio.publicar', false, $2)`,
-      [p.canalId, `${sku.sku}: ${resp.erro}`.slice(0, 4000)],
+      [p.canalId, `${sku.sku} [${comoFoi}]: ${resp.erro}`.slice(0, 4000)],
     ).catch(() => {});
-    return { ok: false, erro: resp.erro, corpo, bloqueados };
+    return { ok: false, erro: resp.erro, corpo: usado, bloqueados, comoFoi };
   }
 
   const novo = resp.item;
@@ -260,10 +276,12 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
     [p.canalId, p.varianteId, String(novo.id), p.categoriaId, Number(sku.livre ?? 0)],
   );
 
+  // Qual formato funcionou fica registrado: da proxima vez a gente le em vez de
+  // deduzir de novo.
   await db.query(
     `insert into log_sync (canal_id, entidade, acao, sucesso, detalhe)
      values ($1, 'anuncio', 'ml.anuncio.publicar', true, $2)`,
-    [p.canalId, `${sku.sku} -> ${novo.id}`],
+    [p.canalId, `${sku.sku} -> ${novo.id} [${comoFoi}]`],
   ).catch(() => {});
 
   return {
@@ -271,7 +289,8 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
     anuncio: String(novo.id),
     permalink: String(novo.permalink ?? ""),
     variacoes: (novo.variations ?? []).length,
-    corpo,
+    corpo: usado,
     bloqueados,
+    comoFoi,
   };
 }
