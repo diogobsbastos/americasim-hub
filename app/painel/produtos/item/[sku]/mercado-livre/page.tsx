@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { sugerirCategorias, type CategoriaSugerida } from "../../../../../../lib/ml-categoria";
 import { regrasDaCategoria } from "../../../../../../lib/ml-publicar";
 import { usuarioDaSessao } from "../../../../../../lib/painel/sessao";
 import { FormAnuncio, FormCategoria } from "../../../[handle]/publicar/FormPublicar";
@@ -10,8 +11,19 @@ import { carregarSku, pacote } from "../dados";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mercado Livre — AmericaSim", robots: { index: false, follow: false } };
 
-export default async function MlDoSku({ params }: { params: Promise<{ sku: string }> }) {
+export default async function MlDoSku({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ sku: string }>;
+  searchParams: Promise<{ buscar?: string; cat?: string; trocar?: string }>;
+}) {
   const { sku } = await params;
+  const sp = await searchParams;
+  const buscar = (sp.buscar ?? "").trim();
+  const catEscolhida = (sp.cat ?? "").trim().toUpperCase();
+  const trocando = sp.trocar === "1" || !!catEscolhida;
+
   const d = await carregarSku(sku);
   if (!d) {
     return (
@@ -23,15 +35,26 @@ export default async function MlDoSku({ params }: { params: Promise<{ sku: strin
   }
   const u = await usuarioDaSessao();
   const podeMexer = u?.papel === "admin" || u?.papel === "operacao";
+  const base = `/painel/produtos/item/${encodeURIComponent(d.resumo.sku)}/mercado-livre`;
 
   const guardados = (d.rascunho?.atributos ?? {}) as Record<string, string>;
+  const categoriaEmUso = catEscolhida || d.categoria;
+  const mostrarFormCategoria = !d.categoria || trocando;
+
+  // Sugestoes do classificador do ML. So quando pedido: cada busca e uma ida
+  // ate eles, e a tela abre muito mais vezes do que alguem troca de categoria.
+  let sugestoes: CategoriaSugerida[] = [];
+  if (d.canalMlId && buscar) {
+    sugestoes = await sugerirCategorias(d.canalMlId, buscar);
+  }
+
   let campos: CampoMl[] = [];
   let bloqueados: { id: string; nome: string }[] = [];
   let erroRegras = "";
 
-  if (d.canalMlId && d.categoria && !d.resumo.anuncio) {
+  if (d.canalMlId && categoriaEmUso && !d.resumo.anuncio) {
     try {
-      const regras = await regrasDaCategoria(d.canalMlId, d.categoria);
+      const regras = await regrasDaCategoria(d.canalMlId, categoriaEmUso);
       campos = regras
         .filter((x) => !x.criaVariacao && (x.obrigatorio || guardados[x.id]))
         .map((x) => ({
@@ -40,7 +63,6 @@ export default async function MlDoSku({ params }: { params: Promise<{ sku: strin
         }));
       bloqueados = regras.filter((x) => x.criaVariacao).map((x) => ({ id: x.id, nome: x.nome }));
     } catch (e: any) {
-      // A API deles fora do ar nao pode derrubar a pagina do produto.
       erroRegras = String(e?.message ?? e).slice(0, 200);
     }
   }
@@ -53,11 +75,9 @@ export default async function MlDoSku({ params }: { params: Promise<{ sku: strin
     publicavel: d.publicavel,
     modo: d.resumo.modo,
     anuncio: d.resumo.anuncio,
-    categoria: d.categoria,
+    categoria: categoriaEmUso,
     titulo: String(d.rascunho?.titulo ?? `${d.resumo.familia} ${pacote(d.atributos)}`).slice(0, 60),
     preco: String(d.rascunho?.preco ?? d.resumo.preco ?? "").replace(".", ","),
-    // Guardado junto com o resto do rascunho. Sem devolver isto, o campo
-    // aparecia vazio a cada volta e dava a impressao de nao ter sido salvo.
     baseMlb: String(d.rascunho?.base_mlb ?? ""),
     campos,
     bloqueados,
@@ -103,21 +123,90 @@ export default async function MlDoSku({ params }: { params: Promise<{ sku: strin
             ) : null}
             {podeMexer ? <Desvincular sku={linha.sku} varianteId={d.varianteId} /> : null}
           </div>
-        ) : erroRegras ? (
-          <p style={{ color: "var(--erro)", margin: 0 }}>
-            Não consegui ler as exigências da categoria {d.categoria}: {erroRegras}
-          </p>
-        ) : !d.categoria ? (
-          <FormCategoria handle={d.handle} linha={linha} />
-        ) : podeMexer ? (
-          <>
-            <p style={{ fontSize: "0.84rem", color: "var(--texto-fraco)", margin: "0 0 14px" }}>
-              categoria <code>{d.categoria}</code> · {campos.filter((c) => c.obrigatorio).length} campos obrigatórios
-            </p>
-            <FormAnuncio handle={d.handle} linha={linha} />
-          </>
         ) : (
-          <p className="nota" style={{ margin: 0 }}>Seu papel permite ver, mas não publicar.</p>
+          <>
+            {/* ------------------------------------------- a categoria */}
+            {mostrarFormCategoria ? (
+              <div style={{ marginBottom: campos.length ? 22 : 0 }}>
+                <h2 style={{ fontSize: "1rem", margin: "0 0 4px" }}>Categoria no Mercado Livre</h2>
+                <p style={{ color: "var(--texto-fraco)", fontSize: "0.84rem", margin: "0 0 12px" }}>
+                  É ela que determina o que o anúncio exige. Errar aqui não dá erro na hora —
+                  dá anúncio no lugar errado, sem visitas, descoberto semanas depois.
+                </p>
+
+                {/* Formulario GET: a busca vira URL, o botao voltar funciona, e
+                    nao entra JavaScript de cliente numa tela que nao precisa. */}
+                <form method="get" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                  <input
+                    type="search"
+                    name="buscar"
+                    defaultValue={buscar || linha.titulo}
+                    placeholder="descreva o produto: eSIM internacional para viagem"
+                    style={{ flex: "2 1 260px", width: "auto" }}
+                  />
+                  <input type="hidden" name="trocar" value="1" />
+                  <button type="submit" className="secundario">Onde o ML encaixa isto?</button>
+                </form>
+
+                {buscar && sugestoes.length === 0 ? (
+                  <p style={{ color: "var(--texto-fraco)", fontSize: "0.84rem" }}>
+                    O classificador não devolveu nada para <b>{buscar}</b>. Tente com outras palavras,
+                    ou informe o código direto abaixo.
+                  </p>
+                ) : null}
+
+                {sugestoes.length > 0 ? (
+                  <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
+                    {sugestoes.map((s) => {
+                      const atual = s.id === categoriaEmUso;
+                      return (
+                        <Link
+                          key={s.id}
+                          href={`${base}?cat=${s.id}&buscar=${encodeURIComponent(buscar)}`}
+                          style={{
+                            display: "block",
+                            padding: "10px 12px",
+                            borderRadius: 10,
+                            border: `1px solid ${atual ? "var(--marca)" : "var(--borda)"}`,
+                            textDecoration: "none",
+                            color: "inherit",
+                          }}
+                        >
+                          <b>{s.nome}</b>{" "}
+                          <code style={{ fontSize: "0.75rem", color: "var(--texto-fraco)" }}>{s.id}</code>
+                          {atual ? <span style={{ color: "var(--marca)", fontSize: "0.78rem" }}> · selecionada</span> : null}
+                          <div style={{ fontSize: "0.78rem", color: "var(--texto-fraco)", marginTop: 2 }}>
+                            {s.caminho || s.dominio}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {podeMexer ? <FormCategoria handle={d.handle} linha={linha} /> : null}
+              </div>
+            ) : null}
+
+            {/* ------------------------------------------- o anuncio */}
+            {erroRegras ? (
+              <p style={{ color: "var(--erro)", margin: 0 }}>
+                Não consegui ler as exigências da categoria {categoriaEmUso}: {erroRegras}
+              </p>
+            ) : !d.categoria ? null : podeMexer ? (
+              <>
+                <p style={{ fontSize: "0.84rem", color: "var(--texto-fraco)", margin: "0 0 14px" }}>
+                  categoria <code>{categoriaEmUso}</code> · {campos.filter((c) => c.obrigatorio).length} campos obrigatórios
+                  {!trocando ? (
+                    <> · <Link href={`${base}?trocar=1`}>trocar categoria</Link></>
+                  ) : null}
+                </p>
+                <FormAnuncio handle={d.handle} linha={linha} />
+              </>
+            ) : (
+              <p className="nota" style={{ margin: 0 }}>Seu papel permite ver, mas não publicar.</p>
+            )}
+          </>
         )}
       </div>
     </>
