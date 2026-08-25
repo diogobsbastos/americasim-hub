@@ -63,16 +63,22 @@ export async function regrasDaCategoria(
   });
 }
 
+// Formato unico, com todos os campos sempre presentes.
+//
+// Escrevi isto como uniao discriminada e o build parou em TS2339 — a mesma
+// pedra em que este projeto ja tinha tropecado horas antes, no porteiro das
+// rotas internas. Duas vezes no mesmo dia deixa de ser distracao e vira regra:
+// funcao interna aqui devolve UM formato. A elegancia de "quando deu certo nao
+// existe erro" custa uma rodada de build cada vez que alguem esquece.
+type RespostaPublicacao = { ok: boolean; item: any; erro: string };
+
 // O POST do anuncio, feito na mao para guardar a resposta CRUA.
 //
 // O mlFetch resume o erro em `message` + os `message`/`code` da lista `cause`.
 // Serve para quase tudo e falhou aqui: o ML devolveu "body.invalid_fields" com
 // causas sem `message`, e o resumo virou uma frase que nao diz nada. Numa
 // operacao que cria coisa na loja, a recusa inteira vale mais que a bonita.
-async function publicarItem(
-  canalId: string,
-  corpo: any,
-): Promise<{ ok: true; item: any } | { ok: false; erro: string }> {
+async function publicarItem(canalId: string, corpo: any): Promise<RespostaPublicacao> {
   const token = await tokenDoCanal(canalId);
   const r = await fetch("https://api.mercadolibre.com/items", {
     method: "POST",
@@ -87,11 +93,12 @@ async function publicarItem(
   });
 
   const bruto = await r.text();
+
   if (r.ok) {
     try {
-      return { ok: true, item: JSON.parse(bruto) };
+      return { ok: true, item: JSON.parse(bruto), erro: "" };
     } catch {
-      return { ok: false, erro: `o ML respondeu ${r.status} com algo que nao e JSON: ${bruto.slice(0, 300)}` };
+      return { ok: false, item: null, erro: `o ML respondeu ${r.status} com algo que nao e JSON: ${bruto.slice(0, 300)}` };
     }
   }
 
@@ -114,7 +121,7 @@ async function publicarItem(
 
   const titulo = String(dados?.message ?? dados?.error ?? `HTTP ${r.status}`);
   const detalhe = causas.length ? causas.join(" | ") : bruto.slice(0, 900);
-  return { ok: false, erro: `${titulo} — ${detalhe}` };
+  return { ok: false, item: null, erro: `${titulo} — ${detalhe}` };
 }
 
 export type PedidoPublicacao = {
@@ -178,14 +185,14 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
   const faltando: string[] = [];
   const bloqueados: string[] = [];
 
-  for (const r of regras) {
-    const valor = entrada.get(r.id);
-    if (r.criaVariacao) {
-      if (valor) bloqueados.push(`${r.nome} (${r.id})`);
+  for (const regra of regras) {
+    const valor = entrada.get(regra.id);
+    if (regra.criaVariacao) {
+      if (valor) bloqueados.push(`${regra.nome} (${regra.id})`);
       continue;
     }
-    if (valor) atributos.push({ id: r.id, value_name: valor });
-    else if (r.obrigatorio) faltando.push(`${r.nome} (${r.id})`);
+    if (valor) atributos.push({ id: regra.id, value_name: valor });
+    else if (regra.obrigatorio) faltando.push(`${regra.nome} (${regra.id})`);
   }
 
   if (faltando.length > 0) {
@@ -225,20 +232,20 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
 
   if (p.ensaio) return { ok: true, corpo, bloqueados };
 
-  const r = await publicarItem(p.canalId, corpo);
+  const resp = await publicarItem(p.canalId, corpo);
 
-  if (!r.ok) {
+  if (!resp.ok) {
     // A recusa vai para log_sync ANTES de voltar para a tela: a mensagem na
     // tela some no proximo clique, o registro fica.
     await db.query(
       `insert into log_sync (canal_id, entidade, acao, sucesso, detalhe)
        values ($1, 'anuncio', 'ml.anuncio.publicar', false, $2)`,
-      [p.canalId, `${sku.sku}: ${r.erro}`.slice(0, 4000)],
+      [p.canalId, `${sku.sku}: ${resp.erro}`.slice(0, 4000)],
     ).catch(() => {});
-    return { ok: false, erro: r.erro, corpo, bloqueados };
+    return { ok: false, erro: resp.erro, corpo, bloqueados };
   }
 
-  const novo = r.item;
+  const novo = resp.item;
 
   await db.query(
     `insert into canal_item (canal_id, variante_id, id_externo, categoria_externa, status, quantidade_publicada, ultimo_sync)
