@@ -13,7 +13,12 @@ export const dynamic = "force-dynamic";
 //     linha de estoque nasce, muda de status ou some;
 //   - a propria entrega enfileira 'estoque.replicar' com `pedido_id`, porque
 //     naquele momento o que se sabe e qual pedido saiu.
-// Resolver os dois aqui evita ter duas rotas fazendo a mesma conta.
+//
+// ONDE MORA A QUANTIDADE, no ML: depende do anuncio, e a primeira versao desta
+// rota assumiu que era sempre no item. Levou
+//   "Cannot update item MLB... (available_quantity is not modifiable.)"
+// porque aquele anuncio tem uma variacao, e havendo variacao a quantidade mora
+// nela. Agora a rota PERGUNTA o formato antes de escrever.
 
 async function registrar(canalId: string | null, acao: string, sucesso: boolean, detalhe: string) {
   try {
@@ -25,6 +30,33 @@ async function registrar(canalId: string | null, acao: string, sucesso: boolean,
   } catch (e) {
     console.error("registrar:", e);
   }
+}
+
+// O que mandar no PUT, decidido pelo que o anuncio e de verdade.
+function comoEscrever(item: any, livre: number):
+  { corpo: any } | { recusa: string } {
+  const variacoes: any[] = Array.isArray(item?.variations) ? item.variations : [];
+
+  // Full: o estoque esta no deposito do ML, contado por eles. Mandar o nosso
+  // numero seria afirmar algo sobre o que ha nas prateleiras DELES.
+  if (String(item?.shipping?.logistic_type ?? "") === "fulfillment") {
+    return { recusa: "anuncio em logistica Full: a quantidade e controlada pelo deposito do ML" };
+  }
+
+  if (variacoes.length === 0) return { corpo: { available_quantity: livre } };
+
+  if (variacoes.length === 1) {
+    return { corpo: { variations: [{ id: variacoes[0].id, available_quantity: livre }] } };
+  }
+
+  // Varias variacoes: nosso SKU e um so e nao existe regra dizendo quanto vai
+  // para cada uma. Inventar um rateio aqui seria decidir negocio no escuro, e
+  // o erro so apareceria como venda que nao pode ser entregue.
+  return {
+    recusa:
+      `anuncio tem ${variacoes.length} variacoes e o SKU e um so — nao ha regra de rateio. ` +
+      "Republique o anuncio sem variacoes, ou crie um SKU por variacao.",
+  };
 }
 
 export async function POST(req: Request) {
@@ -47,8 +79,6 @@ export async function POST(req: Request) {
   const canal = await canalMl();
   if (!canal) return Response.json({ ok: true, ignorado: "canal mercadolivre nao existe" });
 
-  // Quais variantes precisam ir para o anuncio. Vindo por pedido, sao as do
-  // pedido; vindo por variante, e uma so.
   const alvos = varianteId
     ? await db.query(
         `select ci.id as item_id, ci.id_externo, ci.quantidade_publicada,
@@ -88,9 +118,29 @@ export async function POST(req: Request) {
     }
 
     try {
+      const item: any = await mlFetch(
+        canal.id,
+        `/items/${a.id_externo}?attributes=id,status,available_quantity,variations,shipping`,
+      );
+
+      const plano = comoEscrever(item, livre);
+      if ("recusa" in plano) {
+        // Recusa NAO e falha de rede: tentar de novo dara o mesmo resultado. Ela
+        // fica gravada na linha do anuncio e o evento sai da fila, em vez de
+        // ficar batendo no ML de 30 em 30 segundos para sempre.
+        await db.query(
+          `update canal_item set status = 'divergente'::status_sync, ultimo_erro = $2, ultimo_sync = now()
+            where id = $1`,
+          [a.item_id, plano.recusa],
+        );
+        await registrar(canal.id, "ml.estoque.recusado", false, `${a.sku} -> ${a.id_externo}: ${plano.recusa}`);
+        feitos.push({ sku: a.sku, anuncio: a.id_externo, acao: "recusado", motivo: plano.recusa });
+        continue;
+      }
+
       await mlFetch(canal.id, `/items/${a.id_externo}`, {
         method: "PUT",
-        body: JSON.stringify({ available_quantity: livre }),
+        body: JSON.stringify(plano.corpo),
       });
 
       await db.query(
@@ -100,11 +150,12 @@ export async function POST(req: Request) {
           where id = $1`,
         [a.item_id, livre],
       );
+      const onde = plano.corpo.variations ? "na variacao" : "no item";
       await registrar(
         canal.id, "ml.estoque.replicar", true,
-        `${a.sku} -> ${a.id_externo}: ${publicada === null ? "?" : publicada} para ${livre}`,
+        `${a.sku} -> ${a.id_externo} (${onde}): ${publicada === null ? "?" : publicada} para ${livre}`,
       );
-      feitos.push({ sku: a.sku, anuncio: a.id_externo, quantidade: livre, acao: "atualizado" });
+      feitos.push({ sku: a.sku, anuncio: a.id_externo, quantidade: livre, onde, acao: "atualizado" });
     } catch (e: any) {
       const msg = String(e?.message ?? e).slice(0, 400);
 
