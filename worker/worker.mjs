@@ -89,8 +89,17 @@ async function despachar(c, ev) {
     const r = await chamarHub("/v1/interno/ml/pedido", { recurso });
     console.log(`evento ${ev.id} (${ev.tipo}): ${JSON.stringify(r).slice(0, 200)}`);
   } else if (ev.tipo === "estoque.replicar") {
-    // Devolver a quantidade ao anuncio do ML entra quando houver publicacao
-    // pelo hub — hoje o anuncio e mantido na mao. No-op CONSCIENTE.
+    // Levar a quantidade real ao anuncio.
+    //
+    // O payload chega de duas origens e passa adiante como veio: o gatilho do
+    // banco manda `variante_id`, a entrega manda `pedido_id`. Quem resolve a
+    // diferenca e a rota. Quanto menos regra este processo carrega, menos
+    // lugar existe para ele divergir do app.
+    const r = await chamarHub("/v1/interno/ml/estoque", {
+      variante_id: p.variante_id ?? null,
+      pedido_id: p.pedido_id ?? null,
+    });
+    console.log(`evento ${ev.id} (${ev.tipo}): ${JSON.stringify(r).slice(0, 200)}`);
   } else if (ev.tipo === "conversao.enviar") {
     // Google/Meta ainda nao conectados — no-op consciente.
   } else {
