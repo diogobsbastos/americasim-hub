@@ -30,7 +30,7 @@ export function FormCategoria({ handle, linha }: { handle: string; linha: LinhaP
       <input type="hidden" name="handle" value={handle} />
       <input type="hidden" name="variante_id" value={linha.varianteId} />
       <label style={{ flex: "1 1 200px" }}>
-        <span style={rotulo}>Categoria no Mercado Livre</span>
+        <span style={rotulo}>Código da categoria</span>
         <input name="categoria" defaultValue={linha.categoria || "MLB270052"} placeholder="MLB270052" style={{ width: "100%" }} />
       </label>
       <button type="submit" disabled={pendente}>{pendente ? "Buscando…" : "Buscar exigências"}</button>
@@ -65,6 +65,22 @@ export function FormAnuncio({ handle, linha }: { handle: string; linha: LinhaPub
             {TIPOS_ANUNCIO.map((t) => (<option key={t.id} value={t.id}>{t.nome}</option>))}
           </select>
         </label>
+
+        {/* Sem frete e o PADRAO: um eSIM nao viaja. Quem precisa declarar
+            excecao e o chip fisico, que vai numa caixa. O codigo cravava me2
+            porque foi o que o formulario do ML ofereceu — mas o `settings` da
+            categoria diz `simple_shipping: optional`. */}
+        <label>
+          <span style={rotulo}>Envio</span>
+          <select name="envio" defaultValue={linha.envio ?? "sem_frete"} style={{ width: "100%" }}>
+            <option value="sem_frete">Sem frete — entrega digital</option>
+            <option value="mercado_envios">Mercado Envios</option>
+          </select>
+          <span style={{ fontSize: "0.74rem", color: "var(--texto-fraco)" }}>
+            eSIM não viaja — o código vai pela conversa
+          </span>
+        </label>
+
         <label>
           <span style={rotulo}>Copiar fotos de</span>
           <input
