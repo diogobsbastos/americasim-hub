@@ -1,8 +1,8 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { inserirPeloSaldo, retirarPeloSaldo } from "./acoes";
-import { ESTADO_AJUSTE_INICIAL, MOTIVOS_RETIRADA } from "./tipos";
+import { inserirPeloSaldo, retirarPeloSaldo } from "./saldo-acoes";
+import { ESTADO_AJUSTE_INICIAL, MOTIVOS_RETIRADA } from "./saldo-tipos";
 
 // O numero do saldo e um botao. Clicou, abre o popup: saldo, Inserir, Retirar.
 // Mesmo gesto do Bling — com a diferenca de que aqui cada unidade e um codigo,

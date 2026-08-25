@@ -1,19 +1,14 @@
-// Tipos e constantes do popup de ajuste de saldo. FORA do acoes.ts de
-// proposito: modulo "use server" so exporta funcao async (18/08 e 25/08).
+// Constante e tipo do formulario da matriz.
+//
+// Moram FORA do acoes.ts porque aquele arquivo carrega a diretiva de servidor
+// no topo, e um modulo assim so pode exportar funcao assincrona. Exportar uma
+// constante de la faz o Next recusar o modulo inteiro em runtime, derrubando
+// toda a arvore de rotas que o importa. Ja aconteceu duas vezes neste projeto:
+// na tela de estoque (18/08) e na aba Canais (25/08).
 
-export interface EstadoAjuste {
+export interface EstadoMatriz {
   erro: string;
   ok: string;
-  detalhes: string[];
 }
 
-export const ESTADO_AJUSTE_INICIAL: EstadoAjuste = { erro: "", ok: "", detalhes: [] };
-
-// Espelho de ROTULO_BAIXA (lib/estoque.ts). Copiado porque lib/estoque importa o
-// banco e nao pode entrar num componente de cliente.
-export const MOTIVOS_RETIRADA: { id: string; nome: string }[] = [
-  { id: "interno", nome: "Uso interno / teste" },
-  { id: "devolvido", nome: "Devolvido ao fornecedor" },
-  { id: "defeito", nome: "Defeito — não ativa" },
-  { id: "expirado", nome: "Venceu antes de vender" },
-];
+export const ESTADO_MATRIZ_INICIAL: EstadoMatriz = { erro: "", ok: "" };
