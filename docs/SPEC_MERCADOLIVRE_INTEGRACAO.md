@@ -1,6 +1,6 @@
 # SPEC — Integração Mercado Livre para produto digital (eSIM)
 
-**Versão:** 1.0 · 25/08/2026 · escrita no dia em que o ciclo rodou inteiro sozinho.
+**Versão:** 1.1 · 25/08/2026 · escrita no dia em que o ciclo rodou inteiro sozinho; seção 2.3 revisada às 13h com a doc oficial do ML (ME2 é da conta; exceção via consultor).
 **Projeto de origem:** AmericaSim hub (`diogobsbastos/americasim-hub`, branch de checkpoint `checkpoint/2026-08-25-ciclo-ml-fechado`, commit `75cbca8`).
 **Para quê:** reproduzir, em outro projeto, a venda de um produto **digital** no Mercado Livre com entrega automática — o ML avisa, o sistema entrega, manda o código na conversa e mantém o estoque do anúncio igual ao estoque real. Tudo o que está aqui foi **provado com evidência** (API, banco, tela); o que é hipótese está marcado como tal.
 
@@ -87,29 +87,35 @@ O "ambiente de teste" do ML é a **produção com usuários marcados como teste*
 
 **Depois de mudar permissão, reconectar no painel.** O token antigo não ganha escopo novo. A prova de que valeu: o retorno do OAuth grava os escopos, e tem que aparecer `urn:ml:all:comunication:/read-write`.
 
-### 2.3 Envio: a regra que ninguém documenta direito
+### 2.3 Envio: a regra que a doc esconde numa frase (revisado 25/08, 13h)
 
-A conta do vendedor tem `mandatory_settings.mode = "me2"` (`GET /users/{id}/shipping_preferences`). **Em toda categoria cuja `GET /categories/{id}/shipping_preferences` lista `me2`, o ML força Mercado Envios**: o `PUT /items/{id}` com `shipping.mode = not_specified` responde 200 e é **ignorado**; criar o item já com `not_specified` também nasce `me2`. Acima de R$79 ainda vem `mandatory_free_shipping` — o vendedor paga frete de algo que não viaja.
+**Mercado Envios obrigatório é configuração DA CONTA, e toda conta nasce assim.** Doc oficial ("Gestão Mercado Envios", developers.mercadolivre.com.br/pt_br/mercado-envios): *"A configuração padrão de um usuário com ME2 e ME1 ativos é com `optional_me1_allowed` … ME2 é mandatório. Se desejar realizar qualquer modificação nesta configuração, é necessário que o vendedor entre em contato com seu consultor comercial, justificando a alteração."* E: *"todos os vendedores têm habilitado custom e not_specified por padrão"* — mas o mandatório manda por cima.
 
-**Só funciona em categoria que NÃO oferece me2.** Aí o item nasce `mode: not_specified` e a página mostra "Entrega a combinar com o vendedor". Para eSIM:
+Na prática, em `GET /users/{id}/shipping_preferences`: `option: "in"` (ME2 para todas as publicações) e `mandatory_settings.mode: "me2"`. **Em toda categoria cuja `GET /categories/{id}/shipping_preferences` lista `me2`, o ML força Mercado Envios**: `PUT /items/{id}` com `shipping.mode = not_specified` responde 200 e é **ignorado**; criar já com `not_specified` também nasce `me2`. Acima de R$79 vem `mandatory_free_shipping`.
 
-| categoria | caminho | modos de envio | serve? |
+**Como os concorrentes vendem eSIM com "Entrega a combinar" em Cartões SIM** (GLOBAL SIM MLB5031685818, MercadoLíder Gold, +25 vendidos; DIAID): **pediram ao ML a liberação de `not_specified` na conta**, com justificativa de produto digital. É pedido ao consultor comercial, não privilégio de conta antiga nem categoria.
+
+**Caminho para o AmericaSim:** com a conta definitiva, abrir o pedido ao ML ("eSIM — entrega digital pela conversa, sem objeto físico; solicito liberar envio *a combinar* / `not_specified`"). Antes de publicar, `POST /users/{id}/shipping_modes` com `category_id` e atributos responde quais `available_modes` a conta tem naquela categoria — é a prova de que o pedido foi atendido (deixar como botão no painel).
+
+**O que NÃO funciona (testado):** categoria sem ME2 como atalho. `MLB1730` (Softwares › Internet e Redes) publica com `not_specified`, mas a **moderação finaliza o anúncio em horas por "categoria incorreta"** — aconteceu com o MLB5128736721 em 25/08 às 15h. A categoria certa para eSIM é **Cartões SIM (MLB270052)**.
+
+| categoria | caminho | modos de envio | veredito |
 |---|---|---|---|
-| MLB270052 | Celulares › Acessórios › Cartões SIM | custom, me1, **me2**, not_specified | ❌ o classificador sempre sugere esta; ML força ME2 |
-| **MLB1730** | Informática › Softwares › Internet e Redes | custom, me1, not_specified | ✅ o próprio classificador aponta para ela com "plano de dados internet" |
-| MLB5106 | Celulares › Acessórios › Softwares | custom, me1, not_specified | ✅ reserva |
+| **MLB270052** | Celulares › Acessórios › Cartões SIM | custom, me1, **me2**, not_specified | ✅ a certa; `not_specified` só com a liberação na conta |
+| MLB1730 | Informática › Softwares › Internet e Redes | custom, me1, not_specified | ❌ publica, mas a moderação finaliza ("categoria incorreta") |
+| MLB5106 | Celulares › Acessórios › Softwares | custom, me1, not_specified | ❌ mesmo risco |
 
-**Custos do ML num item de R$49,90 (tela do vendedor, 25/08):** tarifa de venda Clássico 13% = R$6,49 · custo de envio R$0,00 ("combinar com o comprador") · **custo fixo por unidade vendida R$7,75** · você recebe R$35,66. O "custo fixo" é taxa do ML em **todo item abaixo de R$79**, por unidade, em qualquer categoria (no anúncio antigo em Cartões SIM aparecia como R$8,15). Acima de R$79 o custo fixo some; nas categorias com ME2 ele é trocado por frete grátis obrigatório por conta do vendedor — na MLB1730, sem ME2, a hipótese é que sobre só a comissão. **Confirmar publicando um item ≥ R$79 e lendo o detalhamento na lista de anúncios** antes de decidir faixa de preço.
+**Custos do ML num item de R$49,90 (tela do vendedor, 25/08):** tarifa de venda Clássico 13% = R$6,49 · custo de envio R$0,00 ("combinar com o comprador") · **custo fixo por unidade vendida R$7,75** · você recebe R$35,66. O "custo fixo" é taxa do ML em **todo item abaixo de R$79**, por unidade, em qualquer categoria (no anúncio antigo em Cartões SIM aparecia como R$8,15). Acima de R$79 o custo fixo some; com ME2 obrigatório ele é trocado por frete grátis por conta do vendedor — com `not_specified` liberado na conta, a hipótese é que sobre só a comissão (GLOBAL SIM vende a R$129,90 "a combinar" sem selo de frete grátis, o que sustenta a hipótese). **Confirmar lendo o detalhamento na lista de anúncios** antes de decidir faixa de preço.
 
-Como descobrir para outro produto: `GET /sites/MLB/domain_discovery/search?q=<título>` dá as categorias candidatas; para cada uma, `GET /categories/{id}/shipping_preferences` — a que não tiver `me2` em `logistics[].mode` é a que serve. Script pronto: `cacar_categoria_sem_me2.sh`.
+Para outro produto: `GET /sites/MLB/domain_discovery/search?q=<título>` dá a categoria certa (use-a — a moderação confere); `GET /categories/{id}/shipping_preferences` mostra os modos que ela oferece; `GET /users/{id}/shipping_preferences` mostra se a conta tem ME2 mandatório. Se o produto é digital e a categoria oferece me2, o caminho é o pedido ao ML, não a troca de categoria. Scripts: `cacar_categoria_sem_me2.sh` (diagnóstico, não atalho), `espiar_api.sh`.
 
 **`custom` não resolve.** `custom` precisa de `costs: [{description, cost: "0"}]` (lista, não inteiro — o ML recusa `costs: 0` com `invalid property type`), mas continua sendo um envio: o ML calcula prazo e coloca selo de frete.
 
-### 2.4 Corpo do anúncio que funcionou
+### 2.4 Corpo do anúncio que funcionou (exemplo com a categoria certa; `not_specified` só vale com a liberação na conta)
 
 ```json
 {
-  "category_id": "MLB1730",
+  "category_id": "MLB270052",
   "price": 49.9,
   "currency_id": "BRL",
   "available_quantity": 3,
@@ -217,7 +223,7 @@ Regra de Next que derrubou a tela duas vezes: **módulo `"use server"` só expor
 1. **Conta real cria o app** no DevCenter com a tabela da seção 2.2. Anotar client_id; o client secret vai para env/cofre.
 2. **Painel → Conexões → Mercado Livre**: colar client_id, gravar o secret, **Conectar** com a conta que vai vender (em teste, um test user vendedor). Conferir no `log_auditoria` os escopos gravados.
 3. **Criar test users** (vendedor e comprador) pelo painel; guardar as senhas no cofre.
-4. **Escolher a categoria sem ME2** (`cacar_categoria_sem_me2.sh` ou a seção 2.3). Publicar pela ficha do SKU com `MLB1730`, envio "sem frete", um SKU por anúncio. Provar com `espiar_envio.sh MLB…` que o `shipping.mode` gravado é `not_specified` — "ok" do PUT não é prova.
+4. **Pedir ao ML a liberação de `not_specified` na conta** (seção 2.3) e confirmar com `POST /users/{id}/shipping_modes` para a categoria Cartões SIM. Só então publicar pela ficha do SKU em `MLB270052`, envio "a combinar", um SKU por anúncio. Provar com `espiar_envio.sh MLB…` que o `shipping.mode` gravado é `not_specified` — "ok" do PUT não é prova. **Não usar categoria de software como atalho**: a moderação finaliza.
 5. **Webhook público** atrás de HTTPS, respondendo 200 em < 500 ms; cadastrar a URL e o tópico Orders_v2 no app.
 6. **Compra de teste** com o comprador de teste e o cartão APRO. Não tocar em nada. Conferir na ordem: `evento_saida` (chegou?) → `pedido` (criou, `entregue`?) → `estoque_esim` (um `entregue` a mais?) → `log_sync` (`ml.pedido.mensagem` ok? `ml.estoque.replicar` "N para N-1"?) → conversa do comprador no ML (código chegou?) → lista de anúncios do vendedor (quantidade caiu?).
 7. **Caminho inverso**: inserir códigos pelo painel → o anúncio sobe sozinho.
@@ -237,6 +243,7 @@ Regra de Next que derrubou a tela duas vezes: **módulo `"use server"` só expor
 8. `push_files` sobrescreve arquivo existente sem avisar: `acoes.ts`/`tipos.ts` genéricos em pasta compartilhada. Listar a pasta antes de criar arquivo "novo".
 9. Ausência não prova origem: proteger rota interna por "não tem `x-forwarded-for`" falha porque o próprio Next põe o cabeçalho. Prova é positiva: segredo.
 10. Test user + DevCenter: a sessão do site do ML continua sendo o test user mesmo depois de "entrar" com outra conta — conferir o nome no canto da tela; test user vê o DevCenter vazio.
+11. Conclusão apressada custa credibilidade: eu afirmei "a conta real não tem a trava de ME2" sem ler a doc. A doc diz o contrário (toda conta nasce com ME2 mandatório; a exceção é pedida ao consultor). Antes de escrever "é assim", achar a frase na fonte.
 
 ---
 
