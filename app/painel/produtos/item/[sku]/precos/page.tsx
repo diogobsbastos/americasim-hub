@@ -8,6 +8,22 @@ import { carregarSku, pacote } from "../dados";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Preço e vitrines — AmericaSim", robots: { index: false, follow: false } };
 
+// Dinheiro para a TELA: sempre duas casas, sempre com virgula.
+//
+// A coluna `variante.custo` e numeric de quatro casas, entao o banco devolve
+// "3.2000". A primeira versao disto so trocava o ponto pela virgula e mandava
+// "3,2000" de volta no formulario — e o validador do servidor recusa mais de
+// duas casas, com razao: dinheiro com quatro casas e erro de digitacao quase
+// sempre. O formulario levava recusa por um valor que ele mesmo tinha montado,
+// e nao havia o que corrigir na tela. Erro de validacao sem conserto possivel e
+// o pior tipo.
+function paraCampo(v: string | number | null | undefined): string {
+  if (v === null || v === undefined || v === "") return "";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "";
+  return n.toFixed(2).replace(".", ",");
+}
+
 export default async function PrecosDoSku({ params }: { params: Promise<{ sku: string }> }) {
   const { sku } = await params;
   const d = await carregarSku(sku);
@@ -51,7 +67,7 @@ export default async function PrecosDoSku({ params }: { params: Promise<{ sku: s
     celulas[c.id] = {
       visivel: cel?.visivel ?? false,
       destaque: cel?.destaque ?? false,
-      preco: pr ? String(pr.valor).replace(".", ",") : "",
+      preco: paraCampo(pr?.valor),
     };
   }
 
@@ -59,7 +75,7 @@ export default async function PrecosDoSku({ params }: { params: Promise<{ sku: s
     varianteId: d.varianteId,
     sku: d.resumo.sku,
     rotulo: pacote(d.atributos),
-    custo: d.resumo.custo ? String(d.resumo.custo).replace(".", ",") : "",
+    custo: paraCampo(d.resumo.custo),
     custoMoeda: d.resumo.custoMoeda,
     custoBrl: custo.rows[0]?.custo_brl ?? null,
     fonteCusto: custo.rows[0]?.fonte_custo ?? "indisponivel",
