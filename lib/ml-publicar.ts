@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { mlFetch } from "./mercadolivre";
+import { mlFetch, tokenDoCanal } from "./mercadolivre";
 
 // Publicar no Mercado Livre, e saber as regras antes de tentar.
 //
@@ -16,17 +16,13 @@ import { mlFetch } from "./mercadolivre";
 // Cada categoria tem sua lista de atributos. Tres grupos importam:
 //   - OBRIGATORIOS: sem eles o ML recusa a publicacao;
 //   - FORMADORES DE VARIACAO: preenchidos, fazem o ML criar uma "grade" e
-//     mover o estoque para dentro dela. Foi assim que MLB5126976949 ganhou uma
-//     variacao por causa de "Tamanho do cartao SIM" — campo que a categoria
-//     nem exige;
+//     mover o estoque para dentro dela;
 //   - o resto, opcional.
 // Um SKU nosso e um anuncio la. Entao formador de variacao NAO entra.
 //
 // E ha um quarto grupo que nao esta nessa lista: campos do CORPO do anuncio,
-// como `family_name`. A primeira versao disto varria so os atributos e levou
-//   body.required_fields (... does not contains ... [family_name])
-// na cara. Ler metade do contrato e pior que nao ler: da a sensacao de ter
-// conferido.
+// como `family_name`. Ler metade do contrato e pior que nao ler: da a sensacao
+// de ter conferido.
 
 export type RegraAtributo = {
   id: string;
@@ -65,6 +61,60 @@ export async function regrasDaCategoria(
       dica: String(a?.hint ?? ""),
     };
   });
+}
+
+// O POST do anuncio, feito na mao para guardar a resposta CRUA.
+//
+// O mlFetch resume o erro em `message` + os `message`/`code` da lista `cause`.
+// Serve para quase tudo e falhou aqui: o ML devolveu "body.invalid_fields" com
+// causas sem `message`, e o resumo virou uma frase que nao diz nada. Numa
+// operacao que cria coisa na loja, a recusa inteira vale mais que a bonita.
+async function publicarItem(
+  canalId: string,
+  corpo: any,
+): Promise<{ ok: true; item: any } | { ok: false; erro: string }> {
+  const token = await tokenDoCanal(canalId);
+  const r = await fetch("https://api.mercadolibre.com/items", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(corpo),
+    cache: "no-store",
+    signal: AbortSignal.timeout(20000),
+  });
+
+  const bruto = await r.text();
+  if (r.ok) {
+    try {
+      return { ok: true, item: JSON.parse(bruto) };
+    } catch {
+      return { ok: false, erro: `o ML respondeu ${r.status} com algo que nao e JSON: ${bruto.slice(0, 300)}` };
+    }
+  }
+
+  let dados: any = null;
+  try {
+    dados = JSON.parse(bruto);
+  } catch {
+    /* fica com o texto cru mesmo */
+  }
+
+  // Tenta resumir; nao conseguindo, entrega o JSON inteiro. Feio e util vale
+  // mais que limpo e mudo.
+  const causas: string[] = [];
+  for (const c of dados?.cause ?? []) {
+    const partes = [c?.code, c?.message, c?.department, c?.type]
+      .filter((x: any) => typeof x === "string" && x.trim());
+    if (partes.length) causas.push(partes.join(" · "));
+    else if (c && typeof c === "object") causas.push(JSON.stringify(c));
+  }
+
+  const titulo = String(dados?.message ?? dados?.error ?? `HTTP ${r.status}`);
+  const detalhe = causas.length ? causas.join(" | ") : bruto.slice(0, 900);
+  return { ok: false, erro: `${titulo} — ${detalhe}` };
 }
 
 export type PedidoPublicacao = {
@@ -152,11 +202,8 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
     }
   }
 
-  // `family_name` e o nome da LINHA de produto, nao do anuncio: "eSIM Europa
-  // 5GB 15 dias", nao "eSIM Europa 5 GB · 15 dias - ativacao por QR". O modelo
-  // ja e exatamente isso, entao ele serve; o titulo cobre o caso de nao haver
-  // modelo. Nao virou campo na tela porque seria um terceiro lugar para digitar
-  // a mesma coisa — e tres lugares para o mesmo dado e como eles divergem.
+  // `family_name` e o nome da LINHA de produto, nao do anuncio. O modelo ja e
+  // exatamente isso; o titulo cobre o caso de nao haver modelo.
   const familia = (entrada.get("MODEL") || p.titulo).slice(0, 60);
 
   const corpo: any = {
@@ -178,12 +225,20 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
 
   if (p.ensaio) return { ok: true, corpo, bloqueados };
 
-  let novo: any;
-  try {
-    novo = await mlFetch(p.canalId, "/items", { method: "POST", body: JSON.stringify(corpo) });
-  } catch (e: any) {
-    return { ok: false, erro: String(e?.message ?? e).slice(0, 600), corpo, bloqueados };
+  const r = await publicarItem(p.canalId, corpo);
+
+  if (!r.ok) {
+    // A recusa vai para log_sync ANTES de voltar para a tela: a mensagem na
+    // tela some no proximo clique, o registro fica.
+    await db.query(
+      `insert into log_sync (canal_id, entidade, acao, sucesso, detalhe)
+       values ($1, 'anuncio', 'ml.anuncio.publicar', false, $2)`,
+      [p.canalId, `${sku.sku}: ${r.erro}`.slice(0, 4000)],
+    ).catch(() => {});
+    return { ok: false, erro: r.erro, corpo, bloqueados };
   }
+
+  const novo = r.item;
 
   await db.query(
     `insert into canal_item (canal_id, variante_id, id_externo, categoria_externa, status, quantidade_publicada, ultimo_sync)
