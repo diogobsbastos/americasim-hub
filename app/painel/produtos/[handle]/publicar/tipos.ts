@@ -33,11 +33,12 @@ export interface LinhaPublicar {
   campos: CampoMl[];
   bloqueados: { id: string; nome: string }[];
   erroRegras: string;
-  // Estado da replica de estoque para o anuncio. Mora aqui porque a pergunta
-  // "o que o ML tem hoje" e a primeira que se faz olhando um anuncio publicado.
   sync: string;
   quantidadePublicada: number | null;
   ultimoErro: string;
+  // De onde copiar as fotos. Opcional no tipo porque a tela antiga (da familia)
+  // ainda monta esta estrutura e nao guarda o campo.
+  baseMlb?: string;
 }
 
 // Clássico é o padrão: Premium cobra mais caro por parcelamento sem juros que

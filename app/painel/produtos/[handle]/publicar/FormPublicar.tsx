@@ -67,9 +67,14 @@ export function FormAnuncio({ handle, linha }: { handle: string; linha: LinhaPub
         </label>
         <label>
           <span style={rotulo}>Copiar fotos de</span>
-          <input name="base_mlb" placeholder="MLB123456789" style={{ width: "100%" }} />
+          <input
+            name="base_mlb"
+            defaultValue={linha.baseMlb ?? ""}
+            placeholder="MLB123456789"
+            style={{ width: "100%" }}
+          />
           <span style={{ fontSize: "0.74rem", color: "var(--texto-fraco)" }}>
-            anúncio existente de onde puxar as imagens
+            anúncio existente de onde puxar as imagens — sem foto o ML recusa
           </span>
         </label>
       </div>
