@@ -1,13 +1,8 @@
 import { db } from "./db";
+import { corpoDoEnvio, type TipoEnvio } from "./ml-envio";
 import { mlFetch, tokenDoCanal } from "./mercadolivre";
 
 // Publicar no Mercado Livre, e saber as regras antes de tentar.
-//
-// POR QUE ISTO E BIBLIOTECA E NAO ROTA
-//
-// A primeira versao morava dentro de uma rota interna, alcancavel so pelo
-// worker e por curl no terminal. Publicar produto e trabalho de quem opera a
-// loja, e trabalho de quem opera tem que ser botao na tela.
 //
 // O QUE O ML COBRA, E ONDE ISSO MORDE
 //
@@ -19,7 +14,8 @@ import { mlFetch, tokenDoCanal } from "./mercadolivre";
 //   - o resto, opcional.
 //
 // E ha o que nao esta em lista nenhuma: o formato do CORPO muda conforme a
-// categoria tenha ficha tecnica ou nao. Ver `montarCorpo` la embaixo.
+// categoria tenha ficha tecnica ou nao, e o envio depende do `settings` dela.
+// Duas vezes hoje eu li metade do contrato e conclui que sabia a regra.
 
 export type RegraAtributo = {
   id: string;
@@ -60,18 +56,14 @@ export async function regrasDaCategoria(
   });
 }
 
-// Formato unico, com todos os campos sempre presentes. Escrevi isto como uniao
-// discriminada e o build parou em TS2339 — a mesma pedra do porteiro das rotas
-// internas, horas antes. Duas vezes no mesmo dia vira regra: funcao interna
-// aqui devolve UM formato.
+// Formato unico, com todos os campos. Escrevi como uniao discriminada e o build
+// parou em TS2339 — duas vezes no mesmo dia. Aqui, funcao interna devolve UM
+// formato.
 type RespostaPublicacao = { ok: boolean; item: any; erro: string };
 
-// O POST do anuncio, feito na mao para guardar a resposta CRUA.
-//
-// O mlFetch resume o erro em `message` mais os `message`/`code` da lista
-// `cause`. Serve para quase tudo e falhou aqui: o ML devolveu
-// "body.invalid_fields" com `cause` VAZIO e o motivo dentro de `error`. Numa
-// operacao que cria coisa na loja, a recusa inteira vale mais que a bonita.
+// O POST feito na mao para guardar a resposta CRUA. O mlFetch resume o erro, e
+// o resumo falhou aqui: o ML devolveu "body.invalid_fields" com `cause` vazio e
+// o motivo dentro de `error`.
 async function publicarItem(canalId: string, corpo: any): Promise<RespostaPublicacao> {
   const token = await tokenDoCanal(canalId);
   const r = await fetch("https://api.mercadolibre.com/items", {
@@ -111,8 +103,6 @@ async function publicarItem(canalId: string, corpo: any): Promise<RespostaPublic
     else if (c && typeof c === "object") causas.push(JSON.stringify(c));
   }
 
-  // `message` e o titulo ("body.invalid_fields"); `error` costuma trazer a
-  // frase que explica. Juntar os dois evita a mensagem que nao diz nada.
   const titulo = String(dados?.message ?? `HTTP ${r.status}`);
   const explicacao = String(dados?.error ?? "");
   const detalhe = causas.length ? causas.join(" | ") : explicacao || bruto.slice(0, 900);
@@ -126,6 +116,7 @@ export type PedidoPublicacao = {
   titulo: string;
   preco: number;
   listingTypeId: string;
+  envio: TipoEnvio;
   baseMlb?: string;
   atributos: Record<string, string>;
   ensaio: boolean;
@@ -207,13 +198,10 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
 
   // DOIS FORMATOS DE CORPO, e a categoria decide qual.
   //
-  // Categoria comum: manda `title`, o anuncio se chama o que a gente escreveu.
-  // Categoria com FICHA TECNICA: quem monta o titulo e o ML, a partir de
-  // `family_name` e dos atributos — e mandar `title` junto e recusado com
-  // "The fields [title] are invalid for requested call".
-  //
-  // Nao ha lista publicada de quais categorias sao de cada tipo, e decorar uma
-  // seria descobrir por recusa toda vez que o ML mudasse. Entao: tenta do jeito
+  // Categoria comum: manda `title`. Categoria com FICHA TECNICA: quem monta o
+  // titulo e o ML, a partir de `family_name` e dos atributos — e mandar `title`
+  // junto e recusado com "The fields [title] are invalid for requested call".
+  // Nao ha lista publicada de quais sao de cada tipo, entao: tenta do jeito
   // comum e, se a recusa citar family_name, refaz do outro jeito.
   const familia = (entrada.get("MODEL") || p.titulo).slice(0, 60);
 
@@ -229,7 +217,7 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
       pictures: fotos,
       attributes: atributos,
       // Sem `variations`, de proposito e por escrito.
-      shipping: { mode: "me2", local_pick_up: true, free_shipping: false },
+      shipping: corpoDoEnvio(p.envio),
     };
     if (comFamilia) c.family_name = familia;
     else c.title = p.titulo.slice(0, 60);
@@ -245,19 +233,12 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
   let resp = await publicarItem(p.canalId, corpo);
 
   if (!resp.ok && /family_name/i.test(resp.erro)) {
-    comoFoi = "com family_name (categoria de ficha tecnica — o titulo quem monta e o ML)";
+    comoFoi = "com family_name (ficha tecnica — o titulo quem monta e o ML)";
     usado = montarCorpo(true);
     resp = await publicarItem(p.canalId, usado);
   }
 
   if (!resp.ok) {
-    // A recusa vai para log_sync ANTES de voltar para a tela: a mensagem na
-    // tela some no proximo clique, o registro fica.
-    await db.query(
-      `insert into log_sync (canal_id, entidade, acao, sucesso, detalhe)
-       values ($1, 'anuncio', 'ml.anuncio.publicar', false, $2)`,
-      [p.canalId, `${sku.sku} [${comoFoi}]: ${resp.erro}`.slice(0, 4000)],
-    ).catch(() => {});
     return { ok: false, erro: resp.erro, corpo: usado, bloqueados, comoFoi };
   }
 
@@ -275,14 +256,6 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
             ultimo_erro = null`,
     [p.canalId, p.varianteId, String(novo.id), p.categoriaId, Number(sku.livre ?? 0)],
   );
-
-  // Qual formato funcionou fica registrado: da proxima vez a gente le em vez de
-  // deduzir de novo.
-  await db.query(
-    `insert into log_sync (canal_id, entidade, acao, sucesso, detalhe)
-     values ($1, 'anuncio', 'ml.anuncio.publicar', true, $2)`,
-    [p.canalId, `${sku.sku} -> ${novo.id} [${comoFoi}]`],
-  ).catch(() => {});
 
   return {
     ok: true,
