@@ -3,17 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { db } from "../../../../../lib/db";
 import { canalMl } from "../../../../../lib/mercadolivre";
+import type { TipoEnvio } from "../../../../../lib/ml-envio";
 import { publicarVariante } from "../../../../../lib/ml-publicar";
 import { auditar, usuarioDaSessao } from "../../../../../lib/painel/sessao";
 import type { EstadoPublicar } from "./tipos";
 
-// Publicar mexe na loja de verdade e custa tarifa por venda: e decisao de
-// admin ou operacao, nunca de quem so consulta.
 const PODE = ["admin", "operacao"];
 
-// Guarda o rascunho em canal_item: categoria em `categoria_externa`, o resto em
-// `atributos_externos`. A linha nasce sem `id_externo` — e o rascunho antes de
-// existir anuncio. Assim o trabalho de preencher os campos nao se perde.
 async function guardarRascunho(
   canalId: string,
   varianteId: string,
@@ -30,10 +26,9 @@ async function guardarRascunho(
   );
 }
 
-// Onde este formulario vive hoje. O React 19 limpa o formulario quando a acao
-// termina, entao o que reaparece na tela e o que vier do SERVIDOR — e o
-// servidor so manda de novo se o caminho for revalidado. Revalidar o caminho
-// errado (ou nenhum) e o que fazia os campos sumirem depois da previa.
+// O React 19 limpa o formulario quando a acao termina, entao o que reaparece na
+// tela e o que vier do SERVIDOR — e o servidor so manda de novo se o caminho
+// for revalidado. Revalidar o caminho errado e o que fazia os campos sumirem.
 async function avisarTelas(varianteId: string, handle: string): Promise<void> {
   try {
     const r = await db.query("select sku from variante where id = $1", [varianteId]);
@@ -89,8 +84,11 @@ export async function publicarNoMl(_a: EstadoPublicar, form: FormData): Promise<
   const precoBruto = String(form.get("preco") ?? "").trim().replace(",", ".");
   const tipo = String(form.get("tipo_anuncio") ?? "gold_special").trim();
   const baseMlb = String(form.get("base_mlb") ?? "").trim().toUpperCase();
-  // Um botao pede a previa, outro publica. O mesmo formulario serve aos dois —
-  // ver e fazer com dados diferentes seria ver uma coisa e publicar outra.
+  // Padrao: sem frete. Um eSIM nao viaja — quem tem que declarar excecao e o
+  // chip fisico, nao o digital.
+  const envio = (String(form.get("envio") ?? "sem_frete") === "mercado_envios"
+    ? "mercado_envios"
+    : "sem_frete") as TipoEnvio;
   const ensaio = String(form.get("acao") ?? "ensaio") !== "publicar";
 
   const atributos: Record<string, string> = {};
@@ -102,13 +100,13 @@ export async function publicarNoMl(_a: EstadoPublicar, form: FormData): Promise<
   const canal = await canalMl();
   if (!canal) return { erro: "O canal Mercado Livre não está conectado.", ok: "", previa: "" };
 
-  // O rascunho e gravado ANTES de qualquer recusa. Se o titulo estiver longo
-  // demais ou o preco errado, o que a pessoa ja digitou nos outros campos tem
-  // que sobreviver — senao a mensagem de erro vira punicao.
+  // O rascunho e gravado ANTES de qualquer recusa: se o titulo estiver longo
+  // demais, o que ja foi digitado nos outros campos tem que sobreviver — senao
+  // a mensagem de erro vira punicao.
   if (varianteId) {
     try {
       await guardarRascunho(canal.id, varianteId, categoria, {
-        titulo, preco: precoBruto, tipo, base_mlb: baseMlb, atributos,
+        titulo, preco: precoBruto, tipo, base_mlb: baseMlb, envio, atributos,
       });
       await avisarTelas(varianteId, handle);
     } catch (e) {
@@ -133,6 +131,7 @@ export async function publicarNoMl(_a: EstadoPublicar, form: FormData): Promise<
       titulo,
       preco,
       listingTypeId: tipo,
+      envio,
       baseMlb: baseMlb || undefined,
       atributos,
       ensaio,
@@ -160,7 +159,7 @@ export async function publicarNoMl(_a: EstadoPublicar, form: FormData): Promise<
     entidade: "canal_item",
     entidadeId: varianteId,
     antes: null,
-    depois: { anuncio: r.anuncio, categoria, preco, variacoes: r.variacoes ?? 0 },
+    depois: { anuncio: r.anuncio, categoria, preco, envio, variacoes: r.variacoes ?? 0, como: r.comoFoi },
   });
 
   await avisarTelas(varianteId, handle);
