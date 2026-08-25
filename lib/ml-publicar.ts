@@ -20,8 +20,13 @@ import { mlFetch } from "./mercadolivre";
 //     variacao por causa de "Tamanho do cartao SIM" — campo que a categoria
 //     nem exige;
 //   - o resto, opcional.
-// Um SKU nosso e um anuncio la. Entao formador de variacao NAO entra, venha de
-// onde vier.
+// Um SKU nosso e um anuncio la. Entao formador de variacao NAO entra.
+//
+// E ha um quarto grupo que nao esta nessa lista: campos do CORPO do anuncio,
+// como `family_name`. A primeira versao disto varria so os atributos e levou
+//   body.required_fields (... does not contains ... [family_name])
+// na cara. Ler metade do contrato e pior que nao ler: da a sensacao de ter
+// conferido.
 
 export type RegraAtributo = {
   id: string;
@@ -29,14 +34,10 @@ export type RegraAtributo = {
   obrigatorio: boolean;
   criaVariacao: boolean;
   tipo: string;
-  // Quando a lista e fechada, a tela mostra um seletor em vez de campo livre —
-  // digitar "T-mobile" onde o ML espera "T-Mobile" e recusa na cara.
   valores: { id: string; nome: string }[];
   dica: string;
 };
 
-// O ML nao etiqueta este como formador de variacao, mas trata como tal nas
-// categorias de chip. Descoberto na marra em 25/08.
 const FORMADORES_EXTRA = new Set(["SIM_CARD_SIZE"]);
 
 function temTag(a: any, tag: string): boolean {
@@ -73,7 +74,7 @@ export type PedidoPublicacao = {
   titulo: string;
   preco: number;
   listingTypeId: string;
-  baseMlb?: string; // de onde copiar as fotos
+  baseMlb?: string;
   atributos: Record<string, string>;
   ensaio: boolean;
 };
@@ -110,7 +111,7 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
   if (sku.ja_publicado) {
     return {
       ok: false,
-      erro: `${sku.sku} ja esta no anúncio ${sku.ja_publicado}. Desvincule antes — um anúncio, um SKU.`,
+      erro: `${sku.sku} ja esta no anúncio ${sku.ja_publicado}. Solte o vínculo antes — um anúncio, um SKU.`,
     };
   }
   if (!(p.preco > 0)) return { ok: false, erro: "informe um preço maior que zero" };
@@ -130,8 +131,6 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
   for (const r of regras) {
     const valor = entrada.get(r.id);
     if (r.criaVariacao) {
-      // Barrado mesmo preenchido. E o que impede o anuncio de virar grade sem
-      // ninguem ter pedido isso.
       if (valor) bloqueados.push(`${r.nome} (${r.id})`);
       continue;
     }
@@ -143,22 +142,26 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
     return { ok: false, erro: "faltam campos que o Mercado Livre exige", faltando, bloqueados };
   }
 
-  // Fotos por id: o ML ja as hospeda. Sem isto seria preciso subir imagem de
-  // algum lugar, e nao ha de onde ainda.
   let fotos: any[] = [];
   if (p.baseMlb) {
     try {
       const base: any = await mlFetch(p.canalId, `/items/${p.baseMlb}?attributes=pictures`);
       fotos = (base?.pictures ?? []).map((x: any) => ({ id: x.id })).slice(0, 10);
     } catch {
-      // Sem foto o ML costuma recusar, mas quem decide e ele: a mensagem de
-      // recusa dele diz mais do que um palpite nosso aqui.
       fotos = [];
     }
   }
 
+  // `family_name` e o nome da LINHA de produto, nao do anuncio: "eSIM Europa
+  // 5GB 15 dias", nao "eSIM Europa 5 GB · 15 dias - ativacao por QR". O modelo
+  // ja e exatamente isso, entao ele serve; o titulo cobre o caso de nao haver
+  // modelo. Nao virou campo na tela porque seria um terceiro lugar para digitar
+  // a mesma coisa — e tres lugares para o mesmo dado e como eles divergem.
+  const familia = (entrada.get("MODEL") || p.titulo).slice(0, 60);
+
   const corpo: any = {
     title: p.titulo.slice(0, 60),
+    family_name: familia,
     category_id: p.categoriaId,
     price: Number(p.preco.toFixed(2)),
     currency_id: "BRL",
@@ -182,8 +185,6 @@ export async function publicarVariante(p: PedidoPublicacao): Promise<ResultadoPu
     return { ok: false, erro: String(e?.message ?? e).slice(0, 600), corpo, bloqueados };
   }
 
-  // O vinculo entra junto: anuncio publicado que ninguem amarrou e anuncio que
-  // vende e nao entrega.
   await db.query(
     `insert into canal_item (canal_id, variante_id, id_externo, categoria_externa, status, quantidade_publicada, ultimo_sync)
      values ($1, $2, $3, $4, 'publicado'::status_sync, $5, now())
