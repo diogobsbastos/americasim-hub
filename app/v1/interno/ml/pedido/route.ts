@@ -3,6 +3,7 @@ import { canalMl, mlFetch } from "../../../../../lib/mercadolivre";
 import { entregarPedido } from "../../../../../lib/entrega";
 import { lerCodigo } from "../../../../../lib/cripto-esim";
 import { novoNumeroPedido } from "../../../../../lib/numero";
+import { conferirSegredo } from "../../segredo";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +15,6 @@ export const dynamic = "force-dynamic";
 // puro com `pg` e mais nada. Quem tem o token do Mercado Livre, a chave que
 // abre o codigo do eSIM e a transacao de entrega e o app Next. Duplicar isso
 // no worker seria manter duas versoes da mesma regra — e um dia elas divergem.
-//
-// PROTECAO: so aceita chamada de dentro da maquina. O Nginx SEMPRE poe
-// x-real-ip no que passa por ele; o worker, batendo direto no 127.0.0.1, nao
-// poe nenhum dos dois. Presenca de qualquer um deles = veio de fora = recusa.
-
-function veioDeFora(req: Request): boolean {
-  return !!(req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for"));
-}
 
 async function registrar(canalId: string | null, acao: string, sucesso: boolean, detalhe: string) {
   try {
@@ -36,7 +29,8 @@ async function registrar(canalId: string | null, acao: string, sucesso: boolean,
 }
 
 export async function POST(req: Request) {
-  if (veioDeFora(req)) return new Response("nao", { status: 404 });
+  const porta = await conferirSegredo(req);
+  if (!porta.ok) return Response.json({ erro: porta.motivo }, { status: porta.status });
 
   let corpo: any = null;
   try {
