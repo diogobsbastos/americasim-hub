@@ -66,7 +66,7 @@ export default async function PublicarNoMl({ params }: { params: Promise<{ handl
     let bloqueados: { id: string; nome: string }[] = [];
     let erroRegras = "";
 
-    if (canal && categoria) {
+    if (canal && categoria && !v.id_externo) {
       try {
         if (!cache.has(categoria)) cache.set(categoria, await regrasDaCategoria(canal.id, categoria));
         const regras = cache.get(categoria)!;
@@ -101,6 +101,11 @@ export default async function PublicarNoMl({ params }: { params: Promise<{ handl
       campos,
       bloqueados,
       erroRegras,
+      sync: String(v.sync ?? ""),
+      quantidadePublicada: v.quantidade_publicada === null || v.quantidade_publicada === undefined
+        ? null
+        : Number(v.quantidade_publicada),
+      ultimoErro: String(v.ultimo_erro ?? ""),
     });
   }
 
@@ -114,7 +119,7 @@ export default async function PublicarNoMl({ params }: { params: Promise<{ handl
       <Abas handle={prod.handle} atual="publicar" />
 
       {!canal ? (
-        <div className="cartao perigo">
+        <div className="cartao perigo" style={{ marginBottom: 18 }}>
           <p style={{ margin: 0 }}>
             O Mercado Livre não está conectado. <Link href="/painel/conexoes">Conectar →</Link>
           </p>
@@ -127,9 +132,7 @@ export default async function PublicarNoMl({ params }: { params: Promise<{ handl
       </p>
 
       {!podeMexer ? (
-        <p className="nota" style={{ marginBottom: 14 }}>
-          Seu papel permite ver, mas não publicar.
-        </p>
+        <p className="nota" style={{ marginBottom: 14 }}>Seu papel permite ver, mas não publicar.</p>
       ) : null}
 
       {linhas.map((l) => (
@@ -160,9 +163,12 @@ export default async function PublicarNoMl({ params }: { params: Promise<{ handl
                 </a>
               </p>
               <p style={{ margin: 0, fontSize: "0.86rem", color: "var(--texto-fraco)" }}>
-                estoque no anúncio: <b>{l.quantidadeTexto ?? "—"}</b> · sincronia:{" "}
-                <b style={{ color: l.sync === "publicado" ? "var(--ok)" : "var(--erro)" }}>{l.sync ?? "—"}</b>
+                estoque no anúncio: <b>{l.quantidadePublicada ?? "—"}</b> · aqui: <b>{l.livre}</b> · sincronia:{" "}
+                <b style={{ color: l.sync === "publicado" ? "var(--ok)" : "var(--erro)" }}>{l.sync || "—"}</b>
               </p>
+              {l.ultimoErro ? (
+                <p style={{ margin: "6px 0 0", fontSize: "0.8rem", color: "var(--erro)" }}>{l.ultimoErro}</p>
+              ) : null}
               <p style={{ margin: "8px 0 0", fontSize: "0.84rem" }}>
                 Para trocar o anúncio deste SKU, desvincule em{" "}
                 <Link href={`/painel/produtos/${handle}/canais`}>Canais e preços</Link>.
@@ -177,8 +183,7 @@ export default async function PublicarNoMl({ params }: { params: Promise<{ handl
           ) : (
             <>
               <p style={{ fontSize: "0.84rem", color: "var(--texto-fraco)", margin: "0 0 14px" }}>
-                categoria <code>{l.categoria}</code> ·{" "}
-                <span>{l.campos.filter((c) => c.obrigatorio).length} campos obrigatórios</span>
+                categoria <code>{l.categoria}</code> · {l.campos.filter((c) => c.obrigatorio).length} campos obrigatórios
               </p>
               {podeMexer ? <FormAnuncio handle={handle} linha={l} /> : null}
             </>
