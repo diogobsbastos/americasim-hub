@@ -16,6 +16,13 @@ export const metadata = { title: "Produtos — AmericaSim", robots: { index: fal
 // FAMILIA, empilhando os irmaos numa tela sob o titulo "Variacoes". Meia
 // reforma e pior que nenhuma: ensina que a lista mente sobre o que vem depois
 // do clique. Agora vai para /painel/produtos/item/<SKU>, a ficha daquele item.
+//
+// 25/08, de novo: "onde vende" tem duas tabelas. canal_variante.visivel e a
+// VITRINE (canal tipo landing). canal_item.id_externo e o ANUNCIO (marketplace).
+// A lista somava canal_variante de qualquer tipo e, depois de "Soltar" um
+// anuncio, o selo ML continuava aparecendo por uma linha de canal_variante que
+// ninguem limpava. Agora: vitrine so conta canal landing; marketplace so conta
+// canal_item. Uma fonte por tipo de canal.
 
 const SITUACOES = [
   { v: "ativo", r: "Ativos" },
@@ -73,7 +80,8 @@ export default async function Produtos({
     args.push(canal);
     cond.push(
       `(exists (select 1 from canal_variante cvq join canal cq on cq.id = cvq.canal_id
-                 where cvq.variante_id = v.id and cq.codigo = $${args.length} and cvq.visivel)
+                 where cvq.variante_id = v.id and cq.codigo = $${args.length} and cvq.visivel
+                   and cq.tipo = 'landing')
         or exists (select 1 from canal_item ciq join canal cq2 on cq2.id = ciq.canal_id
                     where ciq.variante_id = v.id and cq2.codigo = $${args.length}
                       and ciq.id_externo is not null))`,
@@ -94,7 +102,8 @@ export default async function Produtos({
   if (situacao === "esgotado") {
     cond.push(
       `v.modo_entrega = 'estoque' and cv.disponivel = 0
-       and (exists (select 1 from canal_variante cvx where cvx.variante_id = v.id and cvx.visivel)
+       and (exists (select 1 from canal_variante cvx join canal cx on cx.id = cvx.canal_id
+                     where cvx.variante_id = v.id and cvx.visivel and cx.tipo = 'landing')
             or exists (select 1 from canal_item cix where cix.variante_id = v.id and cix.id_externo is not null))`,
     );
   }
@@ -111,7 +120,7 @@ export default async function Produtos({
                       'codigo', c2.codigo, 'nome', c2.nome, 'tipo', c2.tipo::text)
                       order by c2.codigo)
                from canal_variante cv2 join canal c2 on c2.id = cv2.canal_id
-              where cv2.variante_id = v.id and cv2.visivel) as vitrines,
+              where cv2.variante_id = v.id and cv2.visivel and c2.tipo = 'landing') as vitrines,
             (select json_agg(json_build_object(
                       'codigo', c3.codigo, 'nome', c3.nome, 'tipo', c3.tipo::text,
                       'externo', ci.id_externo, 'situacao', ci.status::text)

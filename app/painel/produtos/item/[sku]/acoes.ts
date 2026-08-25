@@ -14,6 +14,10 @@ const PODE = ["admin", "operacao"];
 // Mora aqui, na ficha do proprio SKU, porque era a unica coisa do fluxo que
 // obrigava a sair para a tela da familia. O anuncio NAO e apagado no Mercado
 // Livre: ele continua la, so deixa de ser o anuncio deste SKU.
+//
+// 25/08: "onde vende" tem DUAS tabelas — canal_item (o anuncio) e
+// canal_variante.visivel (a vitrine). Soltar limpava so a primeira e a lista
+// de produtos seguia mostrando o selo ML pela segunda. Agora limpa as duas.
 export async function desvincularAnuncio(_a: EstadoPublicar, form: FormData): Promise<EstadoPublicar> {
   const u = await usuarioDaSessao();
   if (!u) return { erro: "Sessão expirada. Entre de novo.", ok: "", previa: "" };
@@ -35,6 +39,12 @@ export async function desvincularAnuncio(_a: EstadoPublicar, form: FormData): Pr
     [canal.id, varianteId],
   );
   if (r.rows.length === 0) return { erro: "Este SKU já estava sem anúncio.", ok: "", previa: "" };
+
+  await db.query(
+    `update canal_variante set visivel = false
+      where canal_id = $1 and variante_id = $2 and visivel`,
+    [canal.id, varianteId],
+  );
 
   await auditar("canal.vinculo.soltar", {
     usuarioId: u.id, entidade: "canal_item", entidadeId: varianteId,
