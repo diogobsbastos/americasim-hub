@@ -14,6 +14,7 @@ import Link from "next/link";
 const ABAS = [
   { chave: "dados", rotulo: "Dados", sufixo: "" },
   { chave: "canais", rotulo: "Canais e preços", sufixo: "/canais" },
+  { chave: "publicar", rotulo: "Mercado Livre", sufixo: "/publicar" },
   { chave: "estoque", rotulo: "Estoque", sufixo: "/estoque" },
   { chave: "fornecedor", rotulo: "Fornecedor", sufixo: "/fornecedor" },
 ];
