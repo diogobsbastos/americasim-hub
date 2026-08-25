@@ -34,10 +34,24 @@ export function corpoDoEnvio(tipo: TipoEnvio): any {
   if (tipo === "mercado_envios") {
     return { mode: "me2", local_pick_up: true, free_shipping: false };
   }
-  // `costs: 0` e o que faz o comprador nao pagar nada. `local_pick_up: true`
-  // porque, formalmente, ele "retira" — e o mais perto de "nao ha entrega"
-  // que esta categoria permite dizer.
-  return { mode: "custom", local_pick_up: true, free_shipping: false, costs: 0 };
+  // A primeira versao mandava `costs: 0` e o ML recusou em 25/08:
+  //
+  //   body.invalid_field_types · invalid property type: [shipping.costs]
+  //   expected List but was Integer value: 0
+  //
+  // No contrato de envio personalizado, `costs` e uma LISTA de
+  // { description, cost }, com o valor em string, e `methods` vai vazio
+  // (developers.mercadolibre.com.ar/en_us/custom-shipping). Um item com custo
+  // "0" e o que faz o comprador nao pagar nada. `local_pick_up: true` porque,
+  // formalmente, ele "retira" — e o mais perto de "nao ha entrega" que esta
+  // categoria permite dizer.
+  return {
+    mode: "custom",
+    local_pick_up: true,
+    free_shipping: false,
+    methods: [],
+    costs: [{ description: "Entrega digital pela conversa do Mercado Livre", cost: "0" }],
+  };
 }
 
 // Consertar o envio de um anuncio JA publicado, sem republicar.
