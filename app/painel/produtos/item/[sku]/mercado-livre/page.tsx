@@ -12,6 +12,14 @@ import { carregarSku, pacote } from "../dados";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mercado Livre — AmericaSim", robots: { index: false, follow: false } };
 
+// Endereco publico de um item: produto.mercadolivre.com.br/MLB-<digitos>.
+// `www.mercadolivre.com.br/anuncio/MLB...` NAO existe — abria pagina vazia e
+// parecia que o anuncio tinha sumido (25/08).
+function urlDoAnuncio(mlb: string): string {
+  const digitos = String(mlb).replace(/^MLB-?/i, "");
+  return `https://produto.mercadolivre.com.br/MLB-${digitos}`;
+}
+
 export default async function MlDoSku({
   params,
   searchParams,
@@ -110,9 +118,10 @@ export default async function MlDoSku({
           <div>
             <p style={{ margin: "0 0 8px" }}>
               Publicado em{" "}
-              <a href={`https://www.mercadolivre.com.br/anuncio/${linha.anuncio}`} target="_blank" rel="noreferrer">
+              <a href={urlDoAnuncio(linha.anuncio)} target="_blank" rel="noreferrer">
                 <code>{linha.anuncio}</code>
               </a>
+              <span style={{ fontSize: "0.78rem", color: "var(--texto-fraco)" }}> · abre a página pública do anúncio</span>
             </p>
             <p style={{ margin: 0, fontSize: "0.86rem", color: "var(--texto-fraco)" }}>
               estoque no anúncio: <b>{linha.quantidadePublicada ?? "—"}</b> · aqui: <b>{linha.livre}</b> · sincronia:{" "}
