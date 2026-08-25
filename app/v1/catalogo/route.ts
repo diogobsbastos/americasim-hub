@@ -11,6 +11,13 @@ export const dynamic = "force-dynamic";
 // como "Esgotado" ate alguem lembrar de desmarcar na mao — e "ate alguem
 // lembrar" nao e um mecanismo.
 //
+// O QUE CONTA COMO LIVRE (migracao 010): esta rota contava so
+// status='disponivel'. Reserva de carrinho abandonado vencia, o codigo voltava
+// a ser vendavel — entregarPedido ja o entregava — mas a vitrine seguia
+// dizendo esgotado. Agora a conta vem da view `estoque_livre`, unica para
+// vitrine, painel e replica de marketplace. Se um dia a regra mudar, muda em
+// um lugar so.
+//
 // `cv.visivel` NAO e tocado por isso: ele guarda a INTENCAO do operador
 // ("quero vender isto nesta loja"). Desliga-lo automaticamente apagaria uma
 // decisao humana, e na reposicao ninguem saberia se o item voltou porque o
@@ -26,12 +33,11 @@ export const dynamic = "force-dynamic";
 // nasce na hora da venda e a contagem de estoque e sempre zero. Hoje nenhuma
 // variante e sob demanda, entao nao ha o que quebrar ainda.
 //
-// `quantidade` (18/08, a pedido do Contratado): contagem de codigos livres. As
-// duas vitrines dividem o MESMO estoque, e o unico jeito de mostrar isso de
-// fora e o numero caindo nas duas telas ao mesmo tempo. Hoje a loja esta atras
-// de Basic Auth, entao o numero nao e publico de fato; quando ela abrir, o
-// caminho usual e mostrar a contagem so abaixo de um limite ("ultimas 3
-// unidades"). `disponivel` continua no contrato e continua booleano.
+// `quantidade`: contagem de codigos livres. As duas vitrines dividem o MESMO
+// estoque, e o unico jeito de mostrar isso de fora e o numero caindo nas duas
+// telas ao mesmo tempo. Quando a loja abrir ao publico, o caminho usual e
+// mostrar a contagem so abaixo de um limite ("ultimas 3 unidades").
+// `disponivel` continua no contrato e continua booleano.
 export async function GET(req: Request) {
   const canal = await autenticar(req, "catalogo");
   if (canal instanceof Response) return canal;
@@ -40,19 +46,16 @@ export async function GET(req: Request) {
     const r = await db.query(
       `select p.handle, p.nome as produto_nome, p.descricao,
               v.sku, v.atributos, pr.valor::text as preco, pr.moeda,
-              cv.destaque, q.n::int as quantidade
+              cv.destaque, l.livre::int as quantidade
          from canal_variante cv
          join variante v on v.id = cv.variante_id and v.ativo
          join produto  p on p.id = v.produto_id  and p.ativo
          join preco   pr on pr.variante_id = v.id and pr.canal_id = cv.canal_id
                         and pr.vigencia_fim is null
-         cross join lateral (
-           select count(*) as n from estoque_esim e
-            where e.variante_id = v.id and e.status = 'disponivel'
-         ) q
+         join estoque_livre l on l.variante_id = v.id
         where cv.canal_id = $1
           and cv.visivel
-          and (cv.mostrar_esgotado or q.n > 0)
+          and (cv.mostrar_esgotado or l.livre > 0)
         order by cv.destaque desc, cv.ordem nulls last, p.handle`,
       [canal.id],
     );
