@@ -10,8 +10,13 @@ import { tokenDoCanal } from "./mercadolivre";
 //   simple_shipping  = optional          <- Mercado Envios NAO e obrigatorio
 //   shipping_options = ["carrier", "custom"]
 //
-// "custom" e frete por conta do vendedor. Com custo zero, equivale a vender sem
-// frete — que e o que um eSIM precisa, porque nada viaja.
+// A segunda versao usou `custom` com custo zero. O ML aceitou, mas a pagina do
+// anuncio passou a mostrar "Frete gratis acima de R$19" e "Chegara entre
+// quinta e sexta": para o ML, custom ainda e um ENVIO, com prazo e selo.
+//
+// O que um eSIM precisa e "nao ha envio". No ML isso e `mode: "not_specified"`,
+// que a pagina exibe como "Entrega a combinar com o vendedor" — e como um
+// concorrente de eSIM aparece na mesma categoria (Cartoes SIM, MLB270052).
 
 export type TipoEnvio = "sem_frete" | "mercado_envios";
 
@@ -20,7 +25,7 @@ export const TIPOS_ENVIO: { id: TipoEnvio; nome: string; explicacao: string }[] 
     id: "sem_frete",
     nome: "Sem frete — entrega digital",
     explicacao:
-      "Nada viaja: o código do eSIM vai pela conversa do Mercado Livre assim que o pagamento é aprovado.",
+      "Nada viaja: o anúncio mostra “Entrega a combinar com o vendedor” e o código do eSIM vai pela conversa do Mercado Livre assim que o pagamento é aprovado.",
   },
   {
     id: "mercado_envios",
@@ -34,24 +39,9 @@ export function corpoDoEnvio(tipo: TipoEnvio): any {
   if (tipo === "mercado_envios") {
     return { mode: "me2", local_pick_up: true, free_shipping: false };
   }
-  // A primeira versao mandava `costs: 0` e o ML recusou em 25/08:
-  //
-  //   body.invalid_field_types · invalid property type: [shipping.costs]
-  //   expected List but was Integer value: 0
-  //
-  // No contrato de envio personalizado, `costs` e uma LISTA de
-  // { description, cost }, com o valor em string, e `methods` vai vazio
-  // (developers.mercadolibre.com.ar/en_us/custom-shipping). Um item com custo
-  // "0" e o que faz o comprador nao pagar nada. `local_pick_up: true` porque,
-  // formalmente, ele "retira" — e o mais perto de "nao ha entrega" que esta
-  // categoria permite dizer.
-  return {
-    mode: "custom",
-    local_pick_up: true,
-    free_shipping: false,
-    methods: [],
-    costs: [{ description: "Entrega digital pela conversa do Mercado Livre", cost: "0" }],
-  };
+  // `not_specified` = o vendedor nao define envio. Sem prazo, sem selo de frete,
+  // sem etiqueta. `local_pick_up: false` porque ninguem retira nada.
+  return { mode: "not_specified", local_pick_up: false, free_shipping: false };
 }
 
 // Consertar o envio de um anuncio JA publicado, sem republicar.
