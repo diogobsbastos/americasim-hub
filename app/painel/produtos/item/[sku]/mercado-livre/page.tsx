@@ -4,6 +4,7 @@ import { regrasDaCategoria } from "../../../../../../lib/ml-publicar";
 import { usuarioDaSessao } from "../../../../../../lib/painel/sessao";
 import { FormAnuncio, FormCategoria } from "../../../[handle]/publicar/FormPublicar";
 import type { CampoMl, LinhaPublicar } from "../../../[handle]/publicar/tipos";
+import AjustarEnvio from "../AjustarEnvio";
 import Cabeca from "../Cabeca";
 import Desvincular from "../Desvincular";
 import { carregarSku, pacote } from "../dados";
@@ -41,8 +42,6 @@ export default async function MlDoSku({
   const categoriaEmUso = catEscolhida || d.categoria;
   const mostrarFormCategoria = !d.categoria || trocando;
 
-  // Sugestoes do classificador do ML. So quando pedido: cada busca e uma ida
-  // ate eles, e a tela abre muito mais vezes do que alguem troca de categoria.
   let sugestoes: CategoriaSugerida[] = [];
   if (d.canalMlId && buscar) {
     sugestoes = await sugerirCategorias(d.canalMlId, buscar);
@@ -79,6 +78,7 @@ export default async function MlDoSku({
     titulo: String(d.rascunho?.titulo ?? `${d.resumo.familia} ${pacote(d.atributos)}`).slice(0, 60),
     preco: String(d.rascunho?.preco ?? d.resumo.preco ?? "").replace(".", ","),
     baseMlb: String(d.rascunho?.base_mlb ?? ""),
+    envio: String(d.rascunho?.envio ?? "sem_frete"),
     campos,
     bloqueados,
     erroRegras,
@@ -121,11 +121,15 @@ export default async function MlDoSku({
             {linha.ultimoErro ? (
               <p style={{ margin: "6px 0 0", fontSize: "0.8rem", color: "var(--erro)" }}>{linha.ultimoErro}</p>
             ) : null}
-            {podeMexer ? <Desvincular sku={linha.sku} varianteId={d.varianteId} /> : null}
+            {podeMexer ? (
+              <>
+                <AjustarEnvio sku={linha.sku} anuncio={linha.anuncio} />
+                <Desvincular sku={linha.sku} varianteId={d.varianteId} />
+              </>
+            ) : null}
           </div>
         ) : (
           <>
-            {/* ------------------------------------------- a categoria */}
             {mostrarFormCategoria ? (
               <div style={{ marginBottom: campos.length ? 22 : 0 }}>
                 <h2 style={{ fontSize: "1rem", margin: "0 0 4px" }}>Categoria no Mercado Livre</h2>
@@ -134,8 +138,6 @@ export default async function MlDoSku({
                   dá anúncio no lugar errado, sem visitas, descoberto semanas depois.
                 </p>
 
-                {/* Formulario GET: a busca vira URL, o botao voltar funciona, e
-                    nao entra JavaScript de cliente numa tela que nao precisa. */}
                 <form method="get" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
                   <input
                     type="search"
@@ -150,7 +152,7 @@ export default async function MlDoSku({
 
                 {buscar && sugestoes.length === 0 ? (
                   <p style={{ color: "var(--texto-fraco)", fontSize: "0.84rem" }}>
-                    O classificador não devolveu nada para <b>{buscar}</b>. Tente com outras palavras,
+                    O classificador não devolveu nada para <b>{buscar}</b>. Tente outras palavras,
                     ou informe o código direto abaixo.
                   </p>
                 ) : null}
@@ -188,7 +190,6 @@ export default async function MlDoSku({
               </div>
             ) : null}
 
-            {/* ------------------------------------------- o anuncio */}
             {erroRegras ? (
               <p style={{ color: "var(--erro)", margin: 0 }}>
                 Não consegui ler as exigências da categoria {categoriaEmUso}: {erroRegras}
