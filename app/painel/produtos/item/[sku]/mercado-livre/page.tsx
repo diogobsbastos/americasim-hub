@@ -56,6 +56,9 @@ export default async function MlDoSku({ params }: { params: Promise<{ sku: strin
     categoria: d.categoria,
     titulo: String(d.rascunho?.titulo ?? `${d.resumo.familia} ${pacote(d.atributos)}`).slice(0, 60),
     preco: String(d.rascunho?.preco ?? d.resumo.preco ?? "").replace(".", ","),
+    // Guardado junto com o resto do rascunho. Sem devolver isto, o campo
+    // aparecia vazio a cada volta e dava a impressao de nao ter sido salvo.
+    baseMlb: String(d.rascunho?.base_mlb ?? ""),
     campos,
     bloqueados,
     erroRegras,
