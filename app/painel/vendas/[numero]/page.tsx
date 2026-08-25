@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "../../../../lib/db";
+import ReenviarCodigo from "./ReenviarCodigo";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function DetalhePedido({ params }: { params: Promise<{ nume
   const p = await db.query(
     `select p.id, p.numero, p.status::text as status, p.entregue, p.entregue_em, p.criado_em,
             p.total::text as total, p.moeda, p.pagamento_ref, p.id_externo,
-            c.codigo as canal, c.nome as canal_nome,
+            c.codigo as canal, c.nome as canal_nome, c.tipo::text as canal_tipo,
             cl.email::text as email, cl.nome as cliente_nome, cl.telefone
        from pedido p
        join canal c on c.id = p.canal_id
@@ -70,6 +71,19 @@ export default async function DetalhePedido({ params }: { params: Promise<{ nume
     [ped.numero],
   );
 
+  // Venda do Mercado Livre: o que aconteceu com a mensagem do codigo, pelo
+  // log_sync (a entrega grava la o resultado; o botao Reenviar tambem).
+  const doMl = ped.canal_tipo === "mercadolivre";
+  const mensagens = doMl
+    ? await db.query(
+        `select quando, acao, sucesso, detalhe from log_sync
+          where entidade = 'pedido' and acao like 'ml.pedido.mensagem%'
+            and (entidade_id = $1 or detalhe like $2)
+          order by quando desc limit 5`,
+        [ped.id, `pedido ${ped.id_externo ?? ""}%`],
+      )
+    : { rows: [] as any[] };
+
   const parado = !ped.entregue && (ped.status === "pago" || ped.status === "em_provisionamento");
 
   return (
@@ -81,6 +95,7 @@ export default async function DetalhePedido({ params }: { params: Promise<{ nume
         <h1>{ped.numero}</h1>
         <p>
           {ped.canal_nome} · {quando(ped.criado_em)}
+          {ped.id_externo ? <> · <code>{ped.id_externo}</code></> : null}
         </p>
       </div>
 
@@ -166,6 +181,27 @@ export default async function DetalhePedido({ params }: { params: Promise<{ nume
           quem precisa dele é o cliente, pelo link do pedido.
         </p>
       </div>
+
+      {doMl ? (
+        <div className="cartao" style={{ marginBottom: 18 }}>
+          <h2 style={{ fontSize: "0.95rem", textTransform: "uppercase", margin: "0 0 10px" }}>
+            Código pela conversa do Mercado Livre
+          </h2>
+          {mensagens.rows.length === 0 ? (
+            <p className="nota" style={{ margin: 0 }}>Nenhum envio registrado.</p>
+          ) : (
+            mensagens.rows.map((m: any, k: number) => (
+              <div className="linha" key={k}>
+                <span>{quando(m.quando)} · {m.acao}</span>
+                <code style={{ color: m.sucesso ? "var(--ok)" : "var(--erro)", whiteSpace: "pre-wrap", wordBreak: "break-word", textAlign: "right" }}>
+                  {m.sucesso ? "enviado" : m.detalhe}
+                </code>
+              </div>
+            ))
+          )}
+          {ativacoes.rows.length > 0 ? <ReenviarCodigo numero={ped.numero} pedidoId={ped.id} /> : null}
+        </div>
+      ) : null}
 
       <div className="cartao" style={{ marginBottom: 18 }}>
         <h2 style={{ fontSize: "0.95rem", textTransform: "uppercase", margin: "0 0 10px" }}>

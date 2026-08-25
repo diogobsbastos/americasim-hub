@@ -1,7 +1,7 @@
 import { db } from "../../../../../lib/db";
 import { canalMl, mlFetch } from "../../../../../lib/mercadolivre";
 import { entregarPedido } from "../../../../../lib/entrega";
-import { lerCodigo } from "../../../../../lib/cripto-esim";
+import { enviarCodigoPelaConversa } from "../../../../../lib/ml-mensagem";
 import { novoNumeroPedido } from "../../../../../lib/numero";
 import { conferirSegredo } from "../../segredo";
 
@@ -188,47 +188,17 @@ export async function POST(req: Request) {
 
   // 6. O QR pela conversa do ML. BEST-EFFORT de proposito: a venda ja esta
   //    fechada e o eSIM ja saiu do estoque. Se a mensagem falhar, isso vira
-  //    linha em log_sync e alguem manda a mao — nao se desfaz uma entrega
-  //    porque o mensageiro caiu.
+  //    linha em log_sync e o botao "Reenviar" na tela da venda repete so este
+  //    passo — nao se desfaz uma entrega porque o mensageiro caiu.
+  //    O envio em si mora em lib/ml-mensagem.ts, o mesmo que o botao usa.
   let recado = "nao_enviado";
-  try {
-    const cods = await db.query(
-      `select e.codigo_lpa, e.cifrado
-         from ativacao a join estoque_esim e on e.id = a.estoque_id
-        where a.pedido_id = $1 order by a.entregue_em`,
-      [pedidoId],
-    );
-    const textos = cods.rows
-      .map((l: any) => lerCodigo(l.codigo_lpa, !!l.cifrado))
-      .filter(Boolean);
-
-    if (textos.length > 0) {
-      const pack = String(pedidoMl?.pack_id ?? pedidoMl?.id);
-      const vendedor = String(pedidoMl?.seller?.id ?? canal.config?.usuario_marketplace ?? "");
-      const comprador = String(pedidoMl?.buyer?.id ?? "");
-      const texto =
-        "Obrigado pela compra! Seu eSIM esta pronto.\n\n" +
-        textos.map((t: string) => `Codigo de ativacao:\n${t}`).join("\n\n") +
-        "\n\nComo instalar: Ajustes > Dados moveis > Adicionar eSIM > Usar codigo QR > Inserir manualmente, e cole o codigo acima.\n" +
-        "Ative so quando chegar ao destino: a validade comeca na primeira conexao.";
-
-      await mlFetch(canal.id, `/messages/packs/${pack}/sellers/${vendedor}?tag=post_sale`, {
-        method: "POST",
-        body: JSON.stringify({
-          from: { user_id: vendedor },
-          to: { user_id: comprador },
-          text: texto,
-        }),
-      });
-      recado = "enviado";
-      await registrar(canal.id, "ml.pedido.mensagem", true, `QR enviado no pedido ${idPedido}`);
-    }
-  } catch (e: any) {
+  const env = await enviarCodigoPelaConversa(canal.id, pedidoId);
+  if (env.ok) {
+    recado = "enviado";
+    await registrar(canal.id, "ml.pedido.mensagem", true, `QR enviado no pedido ${idPedido} (${env.enviados} codigo/s)`);
+  } else {
     recado = "falhou";
-    await registrar(
-      canal.id, "ml.pedido.mensagem", false,
-      `pedido ${idPedido}: entrega OK, mensagem falhou -> ${String(e?.message ?? e)}`,
-    );
+    await registrar(canal.id, "ml.pedido.mensagem", false, `pedido ${idPedido}: entrega OK, mensagem falhou -> ${env.erro}`);
   }
 
   return Response.json({ ok: true, pedido: pedidoId, entregas: entregues.length, mensagem: recado });
