@@ -8,24 +8,46 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 })
 const HEARTBEAT = process.env.WORKER_HEARTBEAT || "/tmp/americasim-worker.heartbeat";
 const INTERVALO_MS = 5000;
 
-// O hub, na propria maquina. A rota interna recusa qualquer chamada que tenha
-// passado pelo Nginx, entao tem que ser 127.0.0.1 direto.
+// O hub, na propria maquina.
 const HUB = process.env.HUB_INTERNO || "http://127.0.0.1:3002";
 const TEMPO_LIMITE_MS = 25000;
 
+// A credencial das rotas /v1/interno/*. Vem do BANCO, mesma fonte que a rota
+// consulta para conferir — nao ha um terceiro lugar (arquivo, env) para manter
+// em dia. Cache curto para nao consultar a cada evento; recarga forcada quando
+// o hub recusa, assim trocar o segredo nao exige reiniciar este processo.
+let segredoCache = { valor: "", em: 0 };
+async function segredoInterno(forcar = false) {
+  const agora = Date.now();
+  if (!forcar && segredoCache.valor && agora - segredoCache.em < 60000) return segredoCache.valor;
+  const r = await pool.query("select valor from parametro where chave = 'interno.segredo'");
+  segredoCache = { valor: String(r.rows[0]?.valor ?? ""), em: agora };
+  return segredoCache.valor;
+}
+
 // Bate no hub e devolve o corpo. Erro HTTP vira excecao de proposito: quem
 // chama esta dentro do try do tick, e a fila retenta com espera crescente.
-async function chamarHub(caminho, corpo) {
+async function chamarHub(caminho, corpo, jaTentou = false) {
+  const segredo = await segredoInterno(jaTentou);
+  if (!segredo) throw new Error("parametro interno.segredo nao cadastrado no banco");
+
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), TEMPO_LIMITE_MS);
   try {
     const r = await fetch(`${HUB}${caminho}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-interno": segredo },
       body: JSON.stringify(corpo),
       signal: ctl.signal,
     });
     const txt = await r.text();
+
+    // 404 aqui quase sempre e credencial velha em cache, nao rota inexistente.
+    // Vale uma segunda tentativa com o segredo recarregado antes de desistir.
+    if (r.status === 404 && !jaTentou) {
+      clearTimeout(t);
+      return chamarHub(caminho, corpo, true);
+    }
     if (!r.ok) throw new Error(`hub respondeu ${r.status}: ${txt.slice(0, 300)}`);
     try {
       return JSON.parse(txt);
