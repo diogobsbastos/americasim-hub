@@ -8,6 +8,35 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 })
 const HEARTBEAT = process.env.WORKER_HEARTBEAT || "/tmp/americasim-worker.heartbeat";
 const INTERVALO_MS = 5000;
 
+// O hub, na propria maquina. A rota interna recusa qualquer chamada que tenha
+// passado pelo Nginx, entao tem que ser 127.0.0.1 direto.
+const HUB = process.env.HUB_INTERNO || "http://127.0.0.1:3002";
+const TEMPO_LIMITE_MS = 25000;
+
+// Bate no hub e devolve o corpo. Erro HTTP vira excecao de proposito: quem
+// chama esta dentro do try do tick, e a fila retenta com espera crescente.
+async function chamarHub(caminho, corpo) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), TEMPO_LIMITE_MS);
+  try {
+    const r = await fetch(`${HUB}${caminho}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(corpo),
+      signal: ctl.signal,
+    });
+    const txt = await r.text();
+    if (!r.ok) throw new Error(`hub respondeu ${r.status}: ${txt.slice(0, 300)}`);
+    try {
+      return JSON.parse(txt);
+    } catch {
+      return { ok: true };
+    }
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function despachar(c, ev) {
   const p = ev.payload || {};
   if (ev.tipo === "entrega.notificar") {
@@ -22,8 +51,24 @@ async function despachar(c, ev) {
        on conflict (destino, canal, referencia) do nothing`,
       [p.pedido_id, JSON.stringify(p)],
     );
+  } else if (ev.tipo === "orders_v2" || ev.tipo === "orders") {
+    // A venda no Mercado Livre.
+    //
+    // O worker NAO faz esse trabalho: ele nao tem o token do ML nem a chave que
+    // abre o codigo do eSIM, e duplicar a regra de entrega aqui seria manter
+    // duas versoes da mesma coisa ate elas divergirem. Ele so aponta.
+    //
+    // O corpo da notificacao do ML traz o ponteiro em `resource`
+    // ("/orders/2000012345678901"). O estado do pedido vem da API, nao daqui:
+    // entre a notificacao e este instante o pedido pode ter sido pago,
+    // cancelado ou reembolsado.
+    const recurso = String(p.resource ?? p.recurso ?? "");
+    if (!recurso) throw new Error("notificacao do ML sem `resource`");
+    const r = await chamarHub("/v1/interno/ml/pedido", { recurso });
+    console.log(`evento ${ev.id} (${ev.tipo}): ${JSON.stringify(r).slice(0, 200)}`);
   } else if (ev.tipo === "estoque.replicar") {
-    // ML/Amazon ainda nao conectados — no-op CONSCIENTE (nao e esquecimento).
+    // Devolver a quantidade ao anuncio do ML entra quando houver publicacao
+    // pelo hub — hoje o anuncio e mantido na mao. No-op CONSCIENTE.
   } else if (ev.tipo === "conversao.enviar") {
     // Google/Meta ainda nao conectados — no-op consciente.
   } else {
