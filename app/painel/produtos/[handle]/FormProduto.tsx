@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { salvarProduto, ESTADO_PRODUTO_INICIAL } from "./acoes";
+import { salvarProduto } from "./acoes";
+import { ESTADO_PRODUTO_INICIAL } from "./tipos";
 
 export default function FormProduto({
   handle,

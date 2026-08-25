@@ -3,20 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { db } from "../../../../lib/db";
 import { auditar, usuarioDaSessao } from "../../../../lib/painel/sessao";
+import type { EstadoProduto } from "./tipos";
 
 // Dados do proprio produto: nome, descricao e se esta ativo.
 // A descricao ja existia no banco (`produto.descricao`) desde a migracao 001 —
 // so nao tinha tela. E ela e o texto que vai para a vitrine e, depois, para o
 // anuncio do Mercado Livre.
+//
+// ATENCAO ao mexer neste arquivo: com "use server" no topo, ele so pode
+// exportar funcao assincrona. O tipo e o ESTADO_PRODUTO_INICIAL moram em
+// ./tipos.ts justamente por isso — ja quebraram a producao uma vez.
 
 const PODE_EDITAR = ["admin", "operacao"];
-
-export interface EstadoProduto {
-  erro: string;
-  ok: string;
-}
-
-export const ESTADO_PRODUTO_INICIAL: EstadoProduto = { erro: "", ok: "" };
 
 export async function salvarProduto(
   _anterior: EstadoProduto,
