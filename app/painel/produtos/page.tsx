@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "../../../lib/db";
+import Selos, { type SeloCanal } from "./Selos";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,13 @@ export const metadata = { title: "Produtos — AmericaSim", robots: { index: fal
 // catalogos temos", que ninguem pergunta, em vez de "o que esta a venda e como
 // esta", que e a unica pergunta que se faz aqui todo dia. E o mesmo arranjo do
 // Bling, onde o produto pai nao tem estoque e a listagem agrupa as filhas.
+//
+// ONDE VENDE, as duas origens (25/08/2026): esta coluna lia so canal_variante,
+// que e a visibilidade das VITRINES. O vinculo com marketplace mora em
+// canal_item, e a consulta nem olhava — entao um SKU podia estar publicado e
+// vendendo no Mercado Livre com a lista jurando que ele nao estava em canal
+// nenhum. Sao dois conceitos diferentes (intencao de exibir x anuncio
+// amarrado), mas quem opera faz UMA pergunta so: onde este item esta no ar?
 
 const SITUACOES = [
   { v: "ativo", r: "Ativos" },
@@ -45,6 +53,10 @@ function rotulo(familia: string, atributos: any): string {
   return partes.length ? `${familia} ${partes.join(" · ")}` : familia;
 }
 
+function lista(v: unknown): SeloCanal[] {
+  return Array.isArray(v) ? (v as SeloCanal[]) : [];
+}
+
 export default async function Produtos({
   searchParams,
 }: {
@@ -67,10 +79,16 @@ export default async function Produtos({
     cond.push(`(p.nome ilike $${args.length} or p.handle ilike $${args.length} or v.sku ilike $${args.length})`);
   }
   if (canal) {
+    // As duas origens. Antes so a primeira: filtrar por "mercadolivre" devolvia
+    // lista vazia mesmo com anuncio publicado, porque marketplace nunca entra
+    // em canal_variante.
     args.push(canal);
     cond.push(
-      `exists (select 1 from canal_variante cvq join canal cq on cq.id = cvq.canal_id
-                where cvq.variante_id = v.id and cq.codigo = $${args.length} and cvq.visivel)`,
+      `(exists (select 1 from canal_variante cvq join canal cq on cq.id = cvq.canal_id
+                 where cvq.variante_id = v.id and cq.codigo = $${args.length} and cvq.visivel)
+        or exists (select 1 from canal_item ciq join canal cq2 on cq2.id = ciq.canal_id
+                    where ciq.variante_id = v.id and cq2.codigo = $${args.length}
+                      and ciq.id_externo is not null))`,
     );
   }
   if (modo && MODOS_FILTRO.some((m) => m.v === modo)) {
@@ -88,7 +106,8 @@ export default async function Produtos({
   if (situacao === "esgotado") {
     cond.push(
       `v.modo_entrega = 'estoque' and cv.disponivel = 0
-       and exists (select 1 from canal_variante cvx where cvx.variante_id = v.id and cvx.visivel)`,
+       and (exists (select 1 from canal_variante cvx where cvx.variante_id = v.id and cvx.visivel)
+            or exists (select 1 from canal_item cix where cix.variante_id = v.id and cix.id_externo is not null))`,
     );
   }
   const onde = cond.length ? `where ${cond.join(" and ")}` : "";
@@ -100,9 +119,17 @@ export default async function Produtos({
             f.nome as fornecedor, f.ativo as fornecedor_ativo,
             coalesce(cv.disponivel, 0)::int as disponivel,
             cv.fonte_custo,
-            (select string_agg(distinct c2.codigo, ', ' order by c2.codigo)
+            (select json_agg(json_build_object(
+                      'codigo', c2.codigo, 'nome', c2.nome, 'tipo', c2.tipo::text)
+                      order by c2.codigo)
                from canal_variante cv2 join canal c2 on c2.id = cv2.canal_id
-              where cv2.variante_id = v.id and cv2.visivel) as canais
+              where cv2.variante_id = v.id and cv2.visivel) as vitrines,
+            (select json_agg(json_build_object(
+                      'codigo', c3.codigo, 'nome', c3.nome, 'tipo', c3.tipo::text,
+                      'externo', ci.id_externo, 'situacao', ci.status::text)
+                      order by c3.codigo)
+               from canal_item ci join canal c3 on c3.id = ci.canal_id
+              where ci.variante_id = v.id and ci.id_externo is not null) as anuncios
        from variante v
        join produto p on p.id = v.produto_id
        left join fornecedor f on f.id = v.fornecedor_id
@@ -119,9 +146,10 @@ export default async function Produtos({
 
   // "Esgotado no ar" so vale para quem tem prateleira: item de operadora nao
   // tem saldo por desenho, e contar o zero dele encheria a tela de alarme falso.
-  const esgotados = r.rows.filter(
-    (x: any) => x.modo === "estoque" && x.disponivel === 0 && x.canais,
-  ).length;
+  // Agora conta tambem quem esta no ar SO no marketplace — o risco la e maior,
+  // porque o ML deixa comprar e o cliente ja pagou quando o erro aparece.
+  const noAr = (x: any) => lista(x.vitrines).length > 0 || lista(x.anuncios).length > 0;
+  const esgotados = r.rows.filter((x: any) => x.modo === "estoque" && x.disponivel === 0 && noAr(x)).length;
   const semCusto = r.rows.filter((x: any) => x.fonte_custo === "indisponivel").length;
   const semForn = r.rows.filter((x: any) => !x.fornecedor).length;
 
@@ -144,9 +172,9 @@ export default async function Produtos({
 
       {esgotados > 0 ? (
         <div className="cartao perigo" style={{ marginBottom: 14 }}>
-          <div className="rot">Sem estoque e ainda na vitrine</div>
+          <div className="rot">Sem estoque e ainda no ar</div>
           <div className="val">{esgotados}</div>
-          <div className="pe">Quem comprar paga e recebe erro. Tire da vitrine ou reponha o lote.</div>
+          <div className="pe">Quem comprar paga e recebe erro. Tire do ar ou reponha o lote.</div>
         </div>
       ) : null}
 
@@ -208,7 +236,7 @@ export default async function Produtos({
                 <th style={{ padding: "12px 16px", fontWeight: 600 }}>ENTREGA</th>
                 <th style={{ padding: "12px 16px", fontWeight: 600, textAlign: "right" }}>SALDO</th>
                 <th style={{ padding: "12px 16px", fontWeight: 600, textAlign: "right" }}>CUSTO</th>
-                <th style={{ padding: "12px 16px", fontWeight: 600 }}>VISIVEL EM</th>
+                <th style={{ padding: "12px 16px", fontWeight: 600, minWidth: 150 }}>ONDE VENDE</th>
               </tr>
             </thead>
             <tbody>
@@ -217,6 +245,7 @@ export default async function Produtos({
                 if (abre) familiaAtual = v.handle;
                 const deEstoque = v.modo === "estoque";
                 const zerado = deEstoque && v.disponivel === 0;
+                const selos = [...lista(v.anuncios), ...lista(v.vitrines)];
                 return (
                   <tr key={v.sku} style={{ borderTop: "1px solid var(--borda)" }}>
                     <td style={{ padding: "12px 16px" }}>
@@ -256,9 +285,11 @@ export default async function Produtos({
                     <td style={{ padding: "12px 16px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                       {v.custo ? `${v.custo_moeda} ${Number(v.custo).toFixed(2)}` : (<span style={{ color: "var(--alerta)" }}>sem custo</span>)}
                     </td>
-                    <td style={{ padding: "12px 16px", color: "var(--texto-fraco)" }}>
-                      {v.canais ?? "—"}
-                      {zerado && v.canais ? (<><br /><span style={{ color: "var(--erro)", fontSize: "0.76rem" }}>esgotado no ar</span></>) : null}
+                    <td style={{ padding: "12px 16px" }}>
+                      <Selos canais={selos} />
+                      {zerado && selos.length > 0 ? (
+                        <div style={{ color: "var(--erro)", fontSize: "0.76rem", marginTop: 6 }}>esgotado no ar</div>
+                      ) : null}
                     </td>
                   </tr>
                 );
