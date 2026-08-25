@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "../../../lib/db";
+import AjusteSaldo from "./AjusteSaldo";
 import Selos, { type SeloCanal } from "./Selos";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,9 @@ export const metadata = { title: "Produtos — AmericaSim", robots: { index: fal
 // anuncio, o selo ML continuava aparecendo por uma linha de canal_variante que
 // ninguem limpava. Agora: vitrine so conta canal landing; marketplace so conta
 // canal_item. Uma fonte por tipo de canal.
+//
+// 25/08, ainda: o numero do saldo e um botao (AjusteSaldo) — abre o popup de
+// Inserir / Retirar, como no Bling.
 
 const SITUACOES = [
   { v: "ativo", r: "Ativos" },
@@ -111,6 +115,7 @@ export default async function Produtos({
 
   const r = await db.query(
     `select p.handle, p.nome as familia, p.ativo as familia_ativa,
+            v.id as variante_id,
             v.sku, v.atributos, v.ativo, v.custo::text as custo, v.custo_moeda,
             v.modo_entrega::text as modo, v.publicavel_marketplace,
             f.nome as fornecedor, f.ativo as fornecedor_ativo,
@@ -156,7 +161,7 @@ export default async function Produtos({
             <h1>Produtos</h1>
             <p>
               Cada linha e um item vendavel, com seu SKU, seu saldo, seu preco e de quem ele
-              vem. O nome em destaque so agrupa — quem tem numero e o SKU.
+              vem. O nome em destaque so agrupa — quem tem numero e o SKU. Clique no saldo para inserir ou retirar.
             </p>
           </div>
           <Link href="/painel/produtos/novo" className="botao">+ Incluir</Link>
@@ -269,7 +274,13 @@ export default async function Produtos({
                     </td>
                     <td style={{ padding: "12px 16px", textAlign: "right" }}>
                       {deEstoque ? (
-                        <span style={{ color: zerado ? "var(--erro)" : "var(--ok)" }}>{v.disponivel}</span>
+                        <AjusteSaldo
+                          handle={v.handle}
+                          sku={v.sku}
+                          varianteId={v.variante_id}
+                          saldo={v.disponivel}
+                          rotulo={rotulo(v.familia, v.atributos)}
+                        />
                       ) : (
                         <span style={{ color: "var(--texto-fraco)", fontSize: "0.82rem" }}>sob demanda</span>
                       )}
