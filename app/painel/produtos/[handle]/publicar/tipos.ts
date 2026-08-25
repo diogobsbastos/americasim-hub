@@ -36,9 +36,10 @@ export interface LinhaPublicar {
   sync: string;
   quantidadePublicada: number | null;
   ultimoErro: string;
-  // De onde copiar as fotos. Opcional no tipo porque a tela antiga (da familia)
-  // ainda monta esta estrutura e nao guarda o campo.
   baseMlb?: string;
+  // "sem_frete" | "mercado_envios". Opcional porque a tela antiga (da familia)
+  // ainda monta esta estrutura e nao guarda o campo.
+  envio?: string;
 }
 
 // Clássico é o padrão: Premium cobra mais caro por parcelamento sem juros que
