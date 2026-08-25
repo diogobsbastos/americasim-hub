@@ -6,13 +6,21 @@ export const dynamic = "force-dynamic";
 
 // POST /v1/interno/ml/estoque  { "variante_id": "..." }  ou  { "pedido_id": "..." }
 //
-// Leva a quantidade real do nosso estoque para o anuncio do Mercado Livre.
+// Leva a quantidade VENDAVEL do nosso estoque para o anuncio do Mercado Livre.
 //
 // Dois caminhos chegam aqui e os dois sao legitimos:
 //   - o gatilho do banco (migracao 010) manda `variante_id` sempre que uma
 //     linha de estoque nasce, muda de status ou some;
 //   - a propria entrega enfileira 'estoque.replicar' com `pedido_id`, porque
 //     naquele momento o que se sabe e qual pedido saiu.
+//
+// QUAL NUMERO VAI (decisao de 25/08): disponivel + reservado, NAO o "livre".
+// A reserva de checkout (40 min) existe para dois clientes da LP nao pagarem
+// pelo mesmo ultimo codigo — e continua existindo. Mas descontar a reserva do
+// anuncio fazia carrinho abandonado virar "esgotado" no ML por 40 minutos.
+// Regra dele: prioriza quem paga, nao quem fica em duvida. O risco assumido e
+// a colisao no ULTIMO codigo (LP e ML pagam ao mesmo tempo): o segundo fica
+// "pago sem entrega", a tela de Vendas alerta, e o proximo codigo vai para ele.
 //
 // ONDE MORA A QUANTIDADE, no ML: depende do anuncio, e a primeira versao desta
 // rota assumiu que era sempre no item. Levou
@@ -33,7 +41,7 @@ async function registrar(canalId: string | null, acao: string, sucesso: boolean,
 }
 
 // O que mandar no PUT, decidido pelo que o anuncio e de verdade.
-function comoEscrever(item: any, livre: number):
+function comoEscrever(item: any, quantidade: number):
   { corpo: any } | { recusa: string } {
   const variacoes: any[] = Array.isArray(item?.variations) ? item.variations : [];
 
@@ -43,10 +51,10 @@ function comoEscrever(item: any, livre: number):
     return { recusa: "anuncio em logistica Full: a quantidade e controlada pelo deposito do ML" };
   }
 
-  if (variacoes.length === 0) return { corpo: { available_quantity: livre } };
+  if (variacoes.length === 0) return { corpo: { available_quantity: quantidade } };
 
   if (variacoes.length === 1) {
-    return { corpo: { variations: [{ id: variacoes[0].id, available_quantity: livre }] } };
+    return { corpo: { variations: [{ id: variacoes[0].id, available_quantity: quantidade }] } };
   }
 
   // Varias variacoes: nosso SKU e um so e nao existe regra dizendo quanto vai
@@ -58,6 +66,12 @@ function comoEscrever(item: any, livre: number):
       "Republique o anuncio sem variacoes, ou crie um SKU por variacao.",
   };
 }
+
+// disponivel + reservado, por variante. `reservado` e reserva de checkout ainda
+// nao paga: para o anuncio, continua vendavel.
+const VENDAVEL = `
+  (select count(*)::int from estoque_esim e
+    where e.variante_id = v.id and e.status in ('disponivel', 'reservado')) as vendavel`;
 
 export async function POST(req: Request) {
   const porta = await conferirSegredo(req);
@@ -82,19 +96,17 @@ export async function POST(req: Request) {
   const alvos = varianteId
     ? await db.query(
         `select ci.id as item_id, ci.id_externo, ci.quantidade_publicada,
-                v.id as variante_id, v.sku, l.livre
+                v.id as variante_id, v.sku, ${VENDAVEL}
            from variante v
-           join estoque_livre l on l.variante_id = v.id
            join canal_item ci on ci.variante_id = v.id and ci.canal_id = $2
           where v.id = $1 and ci.id_externo is not null`,
         [varianteId, canal.id],
       )
     : await db.query(
         `select distinct ci.id as item_id, ci.id_externo, ci.quantidade_publicada,
-                v.id as variante_id, v.sku, l.livre
+                v.id as variante_id, v.sku, ${VENDAVEL}
            from item_pedido ip
            join variante v on v.id = ip.variante_id
-           join estoque_livre l on l.variante_id = v.id
            join canal_item ci on ci.variante_id = v.id and ci.canal_id = $2
           where ip.pedido_id = $1 and ci.id_externo is not null`,
         [pedidoId, canal.id],
@@ -106,14 +118,14 @@ export async function POST(req: Request) {
 
   const feitos: any[] = [];
   for (const a of alvos.rows) {
-    const livre = Number(a.livre ?? 0);
+    const quantidade = Number(a.vendavel ?? 0);
     const publicada = a.quantidade_publicada === null ? null : Number(a.quantidade_publicada);
 
     // Ja esta igual la: nao gasta chamada. O ML tem limite de requisicoes por
     // aplicacao, e replicar o que nao mudou queima cota que faz falta no dia de
     // movimento.
-    if (publicada === livre) {
-      feitos.push({ sku: a.sku, anuncio: a.id_externo, quantidade: livre, acao: "ja_estava" });
+    if (publicada === quantidade) {
+      feitos.push({ sku: a.sku, anuncio: a.id_externo, quantidade, acao: "ja_estava" });
       continue;
     }
 
@@ -123,7 +135,7 @@ export async function POST(req: Request) {
         `/items/${a.id_externo}?attributes=id,status,available_quantity,variations,shipping`,
       );
 
-      const plano = comoEscrever(item, livre);
+      const plano = comoEscrever(item, quantidade);
       if ("recusa" in plano) {
         // Recusa NAO e falha de rede: tentar de novo dara o mesmo resultado. Ela
         // fica gravada na linha do anuncio e o evento sai da fila, em vez de
@@ -148,14 +160,14 @@ export async function POST(req: Request) {
             set quantidade_publicada = $2, ultimo_sync = now(),
                 status = 'publicado'::status_sync, ultimo_erro = null
           where id = $1`,
-        [a.item_id, livre],
+        [a.item_id, quantidade],
       );
       const onde = plano.corpo.variations ? "na variacao" : "no item";
       await registrar(
         canal.id, "ml.estoque.replicar", true,
-        `${a.sku} -> ${a.id_externo} (${onde}): ${publicada === null ? "?" : publicada} para ${livre}`,
+        `${a.sku} -> ${a.id_externo} (${onde}): ${publicada === null ? "?" : publicada} para ${quantidade}`,
       );
-      feitos.push({ sku: a.sku, anuncio: a.id_externo, quantidade: livre, onde, acao: "atualizado" });
+      feitos.push({ sku: a.sku, anuncio: a.id_externo, quantidade, onde, acao: "atualizado" });
     } catch (e: any) {
       const msg = String(e?.message ?? e).slice(0, 400);
 
