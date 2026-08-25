@@ -3,21 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { db } from "../../../lib/db";
 import { auditar, usuarioDaSessao } from "../../../lib/painel/sessao";
+import type { EstadoMatriz } from "./tipos";
 
 // Acoes da tela de Produtos — SPEC/08 §3.
 //
 // Quem pode o que (decisao de 18/08): preco e custo mexem em dinheiro, entao
 // so `admin`. Visibilidade e destaque sao operacao do dia a dia, entao `admin`
 // e `operacao`. Sem isto, qualquer pessoa logada mudava o preco da loja.
+//
+// Este arquivo carrega a diretiva de servidor no topo: so pode exportar funcao
+// assincrona. A constante ESTADO_MATRIZ_INICIAL mora em ./tipos.ts por isso.
 const PODE_DINHEIRO = ["admin"];
 const PODE_VITRINE = ["admin", "operacao"];
-
-export interface EstadoMatriz {
-  erro: string;
-  ok: string;
-}
-
-export const ESTADO_MATRIZ_INICIAL: EstadoMatriz = { erro: "", ok: "" };
 
 // Dinheiro entra como texto e sai como texto decimal. NUNCA parseFloat: float
 // soma errado, e o valor vai para NUMERIC no banco (SPEC/02 §2).

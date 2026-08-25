@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { salvarMatriz, ESTADO_MATRIZ_INICIAL } from "../acoes";
+import { salvarMatriz } from "../acoes";
+import { ESTADO_MATRIZ_INICIAL } from "../tipos";
 
 // Matriz variante x canal — SPEC/08 §3. "É aqui que se resolve 'esta vitrine
 // vende só estes planos, por este preço'."
