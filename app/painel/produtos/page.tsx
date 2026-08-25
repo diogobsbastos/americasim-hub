@@ -10,17 +10,12 @@ export const metadata = { title: "Produtos — AmericaSim", robots: { index: fal
 //
 // Antes cada linha era um `produto` e as variantes ficavam escondidas la dentro.
 // So que quem tem preco, custo, saldo, fornecedor e anuncio e a VARIANTE — a
-// familia nao tem nenhum desses. Uma lista de familias respondia "quantos
-// catalogos temos", que ninguem pergunta, em vez de "o que esta a venda e como
-// esta", que e a unica pergunta que se faz aqui todo dia. E o mesmo arranjo do
-// Bling, onde o produto pai nao tem estoque e a listagem agrupa as filhas.
+// familia nao tem nenhum desses.
 //
-// ONDE VENDE, as duas origens (25/08/2026): esta coluna lia so canal_variante,
-// que e a visibilidade das VITRINES. O vinculo com marketplace mora em
-// canal_item, e a consulta nem olhava — entao um SKU podia estar publicado e
-// vendendo no Mercado Livre com a lista jurando que ele nao estava em canal
-// nenhum. Sao dois conceitos diferentes (intencao de exibir x anuncio
-// amarrado), mas quem opera faz UMA pergunta so: onde este item esta no ar?
+// 25/08: o link tambem. Ate aqui a lista era por SKU mas o clique abria a
+// FAMILIA, empilhando os irmaos numa tela sob o titulo "Variacoes". Meia
+// reforma e pior que nenhuma: ensina que a lista mente sobre o que vem depois
+// do clique. Agora vai para /painel/produtos/item/<SKU>, a ficha daquele item.
 
 const SITUACOES = [
   { v: "ativo", r: "Ativos" },
@@ -42,8 +37,6 @@ const ROTULO_MODO: Record<string, string> = {
   operadora_sob_medida: "sob medida",
 };
 
-// O nome que a operacao reconhece: a familia mais o que o pacote entrega. O SKU
-// sozinho e codigo; "eSIM Europa 10GB · 30 dias" e produto.
 function rotulo(familia: string, atributos: any): string {
   const gb = atributos?.gb;
   const dias = atributos?.dias;
@@ -62,8 +55,6 @@ export default async function Produtos({
 }: {
   searchParams: Promise<{ q?: string; canal?: string; situacao?: string; modo?: string; forn?: string }>;
 }) {
-  // Estado do filtro na URL, nunca em estado de componente (SPEC/08 §1):
-  // o link e compartilhavel e o botao voltar funciona.
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const canal = (sp.canal ?? "").trim();
@@ -79,9 +70,6 @@ export default async function Produtos({
     cond.push(`(p.nome ilike $${args.length} or p.handle ilike $${args.length} or v.sku ilike $${args.length})`);
   }
   if (canal) {
-    // As duas origens. Antes so a primeira: filtrar por "mercadolivre" devolvia
-    // lista vazia mesmo com anuncio publicado, porque marketplace nunca entra
-    // em canal_variante.
     args.push(canal);
     cond.push(
       `(exists (select 1 from canal_variante cvq join canal cq on cq.id = cvq.canal_id
@@ -144,10 +132,6 @@ export default async function Produtos({
     db.query("select id, nome from fornecedor order by nome"),
   ]);
 
-  // "Esgotado no ar" so vale para quem tem prateleira: item de operadora nao
-  // tem saldo por desenho, e contar o zero dele encheria a tela de alarme falso.
-  // Agora conta tambem quem esta no ar SO no marketplace — o risco la e maior,
-  // porque o ML deixa comprar e o cliente ja pagou quando o erro aparece.
   const noAr = (x: any) => lista(x.vitrines).length > 0 || lista(x.anuncios).length > 0;
   const esgotados = r.rows.filter((x: any) => x.modo === "estoque" && x.disponivel === 0 && noAr(x)).length;
   const semCusto = r.rows.filter((x: any) => x.fonte_custo === "indisponivel").length;
@@ -196,7 +180,6 @@ export default async function Produtos({
         </div>
       ) : null}
 
-      {/* Formulario GET: o filtro vira URL sozinho, sem JavaScript nenhum. */}
       <form method="get" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
         <input type="search" name="q" defaultValue={q} placeholder="produto ou SKU" style={{ flex: "2 1 180px", width: "auto" }} />
         <select name="forn" defaultValue={forn} style={{ flex: "1 1 160px", width: "auto" }}>
@@ -254,7 +237,7 @@ export default async function Produtos({
                           {v.familia}{v.familia_ativa ? "" : " · familia inativa"}
                         </div>
                       ) : null}
-                      <Link href={`/painel/produtos/${v.handle}`}>
+                      <Link href={`/painel/produtos/item/${encodeURIComponent(v.sku)}`}>
                         <b>{rotulo(v.familia, v.atributos)}</b>
                       </Link>
                       <br />
