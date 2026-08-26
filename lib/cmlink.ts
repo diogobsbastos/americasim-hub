@@ -358,22 +358,37 @@ function mccsDe(cp: unknown): string[] {
 
 // Catalogo: tenta o cooperationMode configurado; se recusar, tenta o outro e
 // avisa. Guarda o resumo em operadora.config.catalogo.
+//
+// PAGINADO DE 50 EM 50: provado no sandbox em 26/08 — count=200 volta
+// code 1000 "每页条数不能超过50" (itens por pagina nao podem passar de 50).
+const PAGINA_CATALOGO = 50;
+const MAX_PAGINAS_CATALOGO = 40; // 2000 pacotes; teto de seguranca, nao meta
+
 export async function sincronizarCatalogo(): Promise<{ ok: boolean; total: number; modo: string; resposta: RespostaCmlink }> {
   const cfg = await configCmlink();
   const modos = cfg.cooperationMode === "2" ? ["2", "1"] : ["1", "2"];
   let r: RespostaCmlink | null = null;
   let modo = modos[0];
+  const brutos: any[] = [];
   for (const m of modos) {
     modo = m;
-    r = await chamarComToken(
-      "app_getDataBundle_SBO/v1",
-      { cooperationMode: m, language: "en", beginIndex: 0, count: 200 },
-      { operacao: "getDataBundle" },
-    );
-    if (r.ok) break;
+    brutos.length = 0;
+    let ok = true;
+    for (let pagina = 0; pagina < MAX_PAGINAS_CATALOGO; pagina++) {
+      r = await chamarComToken(
+        "app_getDataBundle_SBO/v1",
+        { cooperationMode: m, language: "en", beginIndex: pagina * PAGINA_CATALOGO, count: PAGINA_CATALOGO },
+        { operacao: "getDataBundle" },
+      );
+      if (!r.ok) { ok = false; break; }
+      const lote = Array.isArray(r.json?.dataBundles) ? r.json.dataBundles : [];
+      brutos.push(...lote);
+      if (lote.length < PAGINA_CATALOGO) break;
+    }
+    if (ok) break;
   }
   if (!r || !r.ok) return { ok: false, total: 0, modo, resposta: r! };
-  const lista = Array.isArray(r.json?.dataBundles) ? r.json.dataBundles.map(resumirPacote) : [];
+  const lista = brutos.map(resumirPacote);
   await garantirOperadora();
   await db.query(
     `update operadora
