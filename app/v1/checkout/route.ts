@@ -3,7 +3,7 @@ import { autenticar, erro } from "../../../lib/api";
 import { db } from "../../../lib/db";
 import { novoNumeroPedido } from "../../../lib/numero";
 import { assinarAcompanhamento } from "../../../lib/token";
-import { entregarPedido } from "../../../lib/entrega";
+import { entregarItem } from "../../../lib/provisionar";
 import { clienteStripe, comissaoDaVenda, paraCentavos, deCentavos } from "../../../lib/stripe";
 
 export const dynamic = "force-dynamic";
@@ -312,7 +312,10 @@ export async function POST(req: Request) {
 
     // ===== MODO DEV (sem gateway): paga e entrega na hora =====
     await db.query("update pedido set status = 'pago' where id = $1", [pedidoId]);
-    const ent = await entregarPedido(pedidoId, va.variante_id, itemId);
+    // Porta unica (lib/provisionar): estoque entrega agora; operadora_fixo
+    // inicia o provisionamento e a fila termina. A pagina do pedido mostra
+    // "separando o seu eSIM" ate o QR chegar.
+    const ent = await entregarItem(pedidoId, va.variante_id, itemId);
     if (!ent.ok) {
       if (ent.motivo === "sem_estoque") {
         return erro(422, "estoque_indisponivel", "Nao ha eSIM disponivel para esta variante no momento.", {

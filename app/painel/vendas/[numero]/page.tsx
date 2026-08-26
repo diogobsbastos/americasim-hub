@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "../../../../lib/db";
 import ReenviarCodigo from "./ReenviarCodigo";
+import ProvisionarAgora from "./ProvisionarAgora";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +37,8 @@ export default async function DetalhePedido({ params }: { params: Promise<{ nume
   const ped = p.rows[0];
 
   const itens = await db.query(
-    `select i.quantidade, i.preco_unit::text as preco, i.custo_unit::text as custo,
-            v.sku, v.atributos, pr.nome as produto
+    `select i.id, i.quantidade, i.preco_unit::text as preco, i.custo_unit::text as custo,
+            v.sku, v.atributos, v.modo_entrega::text as modo, pr.nome as produto
        from item_pedido i
        join variante v on v.id = i.variante_id
        join produto pr on pr.id = v.produto_id
@@ -49,7 +50,7 @@ export default async function DetalhePedido({ params }: { params: Promise<{ nume
   // Mostramos so o ICCID, que identifica o chip sem permitir instala-lo.
   const ativacoes = await db.query(
     `select a.id, a.status::text as status, a.entregue_em, a.confirmado_em,
-            a.tentativas, a.ultimo_erro, e.iccid, e.operadora
+            a.tentativas, a.ultimo_erro, a.observacao, a.item_pedido_id, e.iccid, e.operadora
        from ativacao a
        left join estoque_esim e on e.id = a.estoque_id
       where a.pedido_id = $1
@@ -86,6 +87,12 @@ export default async function DetalhePedido({ params }: { params: Promise<{ nume
 
   const parado = !ped.entregue && (ped.status === "pago" || ped.status === "em_provisionamento");
 
+  // Venda sob demanda: o item e de modo operadora_fixo. O botao "Provisionar
+  // agora" repete o passo da fila; "Ver status" consulta a operadora.
+  const itemOperadora = itens.rows.find((i: any) => i.modo === "operadora_fixo") ?? null;
+  const iccidOperadora: string | null =
+    ativacoes.rows.find((a: any) => a.item_pedido_id === itemOperadora?.id)?.iccid ?? null;
+
   return (
     <>
       <div className="pn-cabeca">
@@ -104,7 +111,8 @@ export default async function DetalhePedido({ params }: { params: Promise<{ nume
           <div className="rot">Pago sem entrega</div>
           <div className="val">precisa de ação</div>
           <div className="pe">
-            O cliente pagou e não recebeu o eSIM. Verifique estoque da variante e o worker.
+            O cliente pagou e não recebeu o eSIM. Verifique estoque da variante e o worker — ou, se o
+            produto é sob demanda, o motivo em "Último erro" da ativação e o botão "Provisionar agora".
           </div>
         </div>
       ) : null}
@@ -173,9 +181,15 @@ export default async function DetalhePedido({ params }: { params: Promise<{ nume
               {a.ultimo_erro ? (
                 <div className="linha"><span>Último erro</span><code style={{ color: "var(--erro)" }}>{a.ultimo_erro}</code></div>
               ) : null}
+              {a.observacao ? (
+                <div className="linha"><span>Operadora</span><code style={{ whiteSpace: "pre-wrap" }}>{a.observacao}</code></div>
+              ) : null}
             </div>
           ))
         )}
+        {itemOperadora ? (
+          <ProvisionarAgora numero={ped.numero} pedidoId={ped.id} itemId={itemOperadora.id} iccid={iccidOperadora} />
+        ) : null}
         <p className="nota">
           O código de instalação não é exibido aqui de propósito — ele entrega o produto, e
           quem precisa dele é o cliente, pelo link do pedido.

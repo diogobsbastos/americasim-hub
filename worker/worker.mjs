@@ -100,6 +100,17 @@ async function despachar(c, ev) {
       pedido_id: p.pedido_id ?? null,
     });
     console.log(`evento ${ev.id} (${ev.tipo}): ${JSON.stringify(r).slice(0, 200)}`);
+  } else if (ev.tipo === "operadora.provisionar") {
+    // Venda de produto sob demanda (modo operadora_fixo): o pagamento so
+    // reservou o ICCID; e a rota interna que compra o pacote na operadora e
+    // busca o QR (lib/provisionar). 500 = retentar (rede, "em processamento",
+    // QR ainda nao existe); 200 com ok:false = falha definitiva, nao insistir —
+    // o pedido fica no alerta "pago sem entrega" do painel.
+    const r = await chamarHub("/v1/interno/operadora/provisionar", {
+      pedido_id: p.pedido_id ?? null,
+      item_pedido_id: p.item_pedido_id ?? null,
+    });
+    console.log(`evento ${ev.id} (${ev.tipo}): ${JSON.stringify(r).slice(0, 300)}`);
   } else if (ev.tipo === "conversao.enviar") {
     // Google/Meta ainda nao conectados — no-op consciente.
   } else {

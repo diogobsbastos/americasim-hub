@@ -48,11 +48,17 @@ export async function entregarPedido(
     //      devolve o estoque sozinho aqui, sem rotina de faxina.
     // A ordenacao pelo `case` garante a preferencia; sem ela, um pedido pago
     // poderia levar um codigo qualquer e deixar o proprio reservado preso.
+    //
+    // `octet_length(codigo_lpa) > 0`: linha SEM codigo e ICCID do pool da
+    // operadora (lib/provisionar) — vendavel, mas so o motor sob demanda pode
+    // entrega-la, depois de comprar o pacote e buscar o QR. Esta transacao
+    // nunca entrega um QR em branco, mesmo que um SKU mude de modo por engano.
     const cod = await c.query(
       `update estoque_esim
           set status = 'entregue', pedido_id = $1, reservado_ate = null
         where id = (select id from estoque_esim
                      where variante_id = $2
+                       and octet_length(codigo_lpa) > 0
                        and (status = 'disponivel'
                             or (status = 'reservado' and pedido_id = $1)
                             or (status = 'reservado' and reservado_ate is not null

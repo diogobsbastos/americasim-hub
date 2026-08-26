@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import { db } from "../../../../lib/db";
-import { entregarPedido } from "../../../../lib/entrega";
+import { entregarItem } from "../../../../lib/provisionar";
 import { clienteStripe, CHAVE_WEBHOOK, deCentavos } from "../../../../lib/stripe";
 import { lerSegredoApp } from "../../../../lib/segredo-app";
 
@@ -97,7 +97,10 @@ async function confirmarEEntregar(
       ? sessao.payment_intent
       : (sessao.payment_intent as { id?: string } | null)?.id ?? null;
 
-  const ent = await entregarPedido(pedidoId, varianteId, itemId);
+  // Uma porta so: lib/provisionar decide pelo modo de entrega da variante —
+  // estoque entrega na hora (lib/entrega), operadora_fixo inicia o
+  // provisionamento e a fila termina (compra do pacote + QR).
+  const ent = await entregarItem(pedidoId, varianteId, itemId);
 
   // O custo vem DEPOIS da entrega, de proposito: e informacao de margem, nao
   // condicao de entrega.
@@ -115,12 +118,15 @@ async function confirmarEEntregar(
     console.error(`stripe.entrega FALHOU pedido=${pedidoId} motivo=${ent.motivo}`);
     return ok(`pago, mas a entrega falhou (${ent.motivo}) — pedido fica no alerta do painel`);
   }
+  if (ent.provisionando) return ok("pago; provisionamento na operadora iniciado (a fila entrega)");
   return ok(ent.jaEntregue ? "ja estava entregue" : "pago e entregue");
 }
 
 // Cobranca que nao vai acontecer: devolve o eSIM ao estoque na hora, em vez de
 // esperar a reserva expirar. Estoque parado nao vende.
 async function soltarReserva(pedidoId: string, motivo: string): Promise<void> {
+  // ICCID do pool da operadora (codigo vazio) volta a `disponivel` como
+  // qualquer outro: ele continua vendavel — o pacote so e comprado na entrega.
   await db.query(
     `update estoque_esim set status = 'disponivel', pedido_id = null, reservado_ate = null
       where pedido_id = $1 and status = 'reservado'`,

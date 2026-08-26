@@ -3,6 +3,7 @@ import { CMLINK, configCmlink, ondeEstaoAsChaves } from "../../../lib/cmlink";
 import { usuarioDaSessao } from "../../../lib/painel/sessao";
 import { quando } from "../../../lib/quando";
 import CartaoCmlink from "./CartaoCmlink";
+import PlanosEPool, { type VarianteTela } from "./PlanosEPool";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ export default async function Operadoras() {
   const totais = cfg.operadoraId
     ? await db.query(
         `select
-           (select count(*) from estoque_esim where operadora = $2 and status = 'interno')::int as pool,
+           (select count(*) from estoque_esim where operadora = $2 and octet_length(codigo_lpa) = 0 and status = 'disponivel')::int as pool,
            (select count(*) from operadora_plano where operadora_id = $1 and ativo)::int as planos,
            (select count(*) from requisicao_operadora where operadora_id = $1 and resultado = 'erro'
                and criado_em > now() - interval '24 hours')::int as erros_24h`,
@@ -49,6 +50,31 @@ export default async function Operadoras() {
       )
     : { rows: [{ pool: 0, planos: 0, erros_24h: 0 }] };
   const t = totais.rows[0] ?? { pool: 0, planos: 0, erros_24h: 0 };
+
+  // Os SKUs sob demanda, com o plano vinculado e o tamanho do pool de cada um.
+  // Pool = linha de estoque desta operadora SEM codigo (o QR chega na venda).
+  const vars = await db.query(
+    `select v.id, v.sku, p.nome as produto,
+            op.plano_externo, op.custo::text as plano_custo, op.custo_moeda as plano_moeda,
+            (select count(*) from estoque_esim e
+              where e.variante_id = v.id and e.operadora = $1 and octet_length(e.codigo_lpa) = 0
+                and (e.status = 'disponivel' or (e.status = 'reservado' and e.reservado_ate is not null and e.reservado_ate < now())))::int as pool,
+            (select count(*) from estoque_esim e
+              where e.variante_id = v.id and e.operadora = $1 and octet_length(e.codigo_lpa) = 0
+                and e.status = 'reservado' and (e.reservado_ate is null or e.reservado_ate >= now()))::int as reservados
+       from variante v
+       join produto p on p.id = v.produto_id
+       left join operadora o on o.codigo = $1
+       left join operadora_plano op on op.operadora_id = o.id and op.variante_id = v.id and op.ativo
+      where v.modo_entrega = 'operadora_fixo'::modo_entrega and v.ativo
+      order by v.sku`,
+    [CMLINK.codigo],
+  );
+  const variantes: VarianteTela[] = vars.rows.map((r: any) => ({
+    id: r.id, sku: r.sku, produto: r.produto,
+    planoExterno: r.plano_externo ?? null, planoCusto: r.plano_custo ?? null, planoMoeda: r.plano_moeda ? String(r.plano_moeda).trim() : null,
+    pool: Number(r.pool ?? 0), reservados: Number(r.reservados ?? 0),
+  }));
 
   return (
     <>
@@ -64,7 +90,7 @@ export default async function Operadoras() {
         <div className="cartao">
           <div className="rot">ICCIDs no pool</div>
           <div className="val">{t.pool}</div>
-          <div className="pe">chips da operadora ainda sem pacote (status interno)</div>
+          <div className="pe">chips da operadora vendáveis, ainda sem pacote/QR</div>
         </div>
         <div className="cartao">
           <div className="rot">Planos vinculados</div>
@@ -97,6 +123,15 @@ export default async function Operadoras() {
         iccidsTeste={cfg.ambiente === "sandbox" ? [...CMLINK.iccidsTeste] : []}
         podeAdmin={!!podeAdmin}
         podeOperar={!!podeOperar}
+      />
+
+      <PlanosEPool
+        variantes={variantes}
+        catalogo={cfg.catalogo.map((p) => ({
+          id: p.id, nome: p.nome, status: p.status, activationMode: p.activationMode,
+          period: p.period, periodType: p.periodType, precos: p.precos, mccs: p.mccs,
+        }))}
+        podeAdmin={!!podeAdmin}
       />
 
       <div className="cartao" style={{ marginTop: 18 }}>

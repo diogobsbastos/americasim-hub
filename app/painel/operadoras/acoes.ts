@@ -5,10 +5,11 @@
 import { revalidatePath } from "next/cache";
 import QRCode from "qrcode";
 import {
-  CMLINK, ativarPacote, comprarPacote, consumoDoChip, estadoDoChip, infoEsim, jsonBonito,
-  lpaDaResposta, pacotesDoChip, resumoResposta, salvarConfigCmlink, sincronizarCatalogo,
+  CMLINK, ativarPacote, comprarPacote, consumoDoChip, estadoDoChip, garantirOperadora, infoEsim,
+  jsonBonito, lpaDaResposta, pacotesDoChip, resumoResposta, salvarConfigCmlink, sincronizarCatalogo,
   testarConexao, type RespostaCmlink,
 } from "../../../lib/cmlink";
+import { db } from "../../../lib/db";
 import { apagarSegredoApp, salvarSegredoApp } from "../../../lib/segredo-app";
 import { auditar, usuarioDaSessao } from "../../../lib/painel/sessao";
 import type { Chamada, EstadoChamadas, EstadoSimples } from "./tipos";
@@ -228,4 +229,93 @@ export async function ativarPacoteAcao(_a: EstadoChamadas, form: FormData): Prom
   const chamadas = [chamada("APP_activeDataBundle_SBO (ativação)", r)];
   if (!r.ok) return { ...VAZIO, erro: "A ativação NÃO foi aceita. Resposta deles abaixo.", chamadas };
   return { ...VAZIO, ok: "Ativação aceita.", chamadas };
+}
+
+// ---------------------------------------------------------------- planos e pool
+
+// SKU (modo operadora_fixo) -> pacote da CMLink. E o de-para que o motor le
+// (lib/provisionar). Um por (operadora, variante): repetir troca o pacote.
+export async function vincularPlanoAcao(_a: EstadoSimples, form: FormData): Promise<EstadoSimples> {
+  const u = await autorizar(ADMIN);
+  if ("erro" in u) return { erro: u.erro, ok: "" };
+  const varianteId = String(form.get("variante_id") ?? "").trim();
+  const plano = String(form.get("plano_externo") ?? "").trim();
+  const custoTxt = String(form.get("custo") ?? "").trim().replace(",", ".");
+  const moeda = String(form.get("custo_moeda") ?? "USD").trim().toUpperCase().slice(0, 3) || "USD";
+  if (!varianteId || !plano) return { erro: "Escolha o SKU e o pacote.", ok: "" };
+  const custo = custoTxt ? Number(custoTxt) : 0;
+  if (!Number.isFinite(custo) || custo < 0) return { erro: "Custo inválido.", ok: "" };
+
+  const v = await db.query(
+    "select sku, modo_entrega::text as modo, atributos from variante where id = $1",
+    [varianteId],
+  );
+  if (v.rows.length === 0) return { erro: "SKU não encontrado.", ok: "" };
+  if (v.rows[0].modo !== "operadora_fixo") {
+    return { erro: `O SKU ${v.rows[0].sku} está em modo ${v.rows[0].modo}; só SKU em operadora_fixo recebe plano.`, ok: "" };
+  }
+  const operadoraId = await garantirOperadora();
+  const atr = v.rows[0].atributos ?? {};
+  const dias = Number(atr?.dias ?? 0) || null;
+  const dadosMb = Number(atr?.gb ?? 0) ? Math.round(Number(atr.gb) * 1024) : null;
+  const cobertura = Array.isArray(atr?.cobertura) ? atr.cobertura.map(String) : null;
+
+  await db.query(
+    `insert into operadora_plano (operadora_id, variante_id, plano_externo, custo, custo_moeda, cobertura, dias, dados_mb, ativo)
+     values ($1, $2, $3, $4::numeric, $5, $6::text[], $7, $8, true)
+     on conflict (operadora_id, variante_id) do update
+       set plano_externo = excluded.plano_externo, custo = excluded.custo, custo_moeda = excluded.custo_moeda,
+           cobertura = excluded.cobertura, dias = excluded.dias, dados_mb = excluded.dados_mb, ativo = true`,
+    [operadoraId, varianteId, plano, String(custo), moeda, cobertura, dias, dadosMb],
+  );
+  await auditar("operadora.plano", {
+    usuarioId: u.id, entidade: "operadora_plano", entidadeId: varianteId,
+    depois: { operadora: CMLINK.codigo, sku: v.rows[0].sku, plano_externo: plano, custo, moeda },
+  });
+  revalidatePath(CAMINHO);
+  return { erro: "", ok: `${v.rows[0].sku} → pacote ${plano} (${custo} ${moeda}).` };
+}
+
+// ICCIDs virgens entram em estoque_esim como codigos vendaveis SEM QR
+// (codigo_lpa vazio). Quem preenche o QR e o motor, na venda.
+export async function importarPoolAcao(_a: EstadoSimples, form: FormData): Promise<EstadoSimples> {
+  const u = await autorizar(ADMIN);
+  if ("erro" in u) return { erro: u.erro, ok: "" };
+  const varianteId = String(form.get("variante_id") ?? "").trim();
+  const bruto = String(form.get("iccids") ?? "");
+  if (!varianteId) return { erro: "Escolha o SKU.", ok: "" };
+
+  const v = await db.query("select sku, modo_entrega::text as modo from variante where id = $1", [varianteId]);
+  if (v.rows.length === 0) return { erro: "SKU não encontrado.", ok: "" };
+  if (v.rows[0].modo !== "operadora_fixo") {
+    return { erro: `O SKU ${v.rows[0].sku} está em modo ${v.rows[0].modo}; o pool é só para operadora_fixo.`, ok: "" };
+  }
+
+  const todos = bruto.split(/[\s,;]+/).map((x) => x.replace(/\D/g, "")).filter(Boolean);
+  const validos = [...new Set(todos.filter((x) => x.length >= 18 && x.length <= 20))];
+  const invalidos = todos.filter((x) => x.length < 18 || x.length > 20);
+  if (validos.length === 0) return { erro: "Nenhum ICCID válido (18 a 20 dígitos).", ok: "" };
+
+  const lote = `cmlink-pool-${new Date().toISOString().slice(0, 10)}`;
+  let inseridos = 0;
+  const repetidos: string[] = [];
+  for (const iccid of validos) {
+    const r = await db.query(
+      `insert into estoque_esim (variante_id, codigo_lpa, iccid, operadora, status, cifrado, lote, custo_moeda)
+       select $1, ''::bytea, $2, $3, 'disponivel', false, $4, 'USD'
+        where not exists (select 1 from estoque_esim where iccid = $2)
+       returning id`,
+      [varianteId, iccid, CMLINK.codigo, lote],
+    );
+    if (r.rows.length > 0) inseridos++; else repetidos.push(iccid);
+  }
+  await auditar("operadora.pool.importar", {
+    usuarioId: u.id, entidade: "estoque_esim",
+    depois: { operadora: CMLINK.codigo, sku: v.rows[0].sku, lote, inseridos, repetidos: repetidos.length, invalidos: invalidos.length },
+  });
+  revalidatePath(CAMINHO);
+  const partes = [`${inseridos} ICCID(s) no pool de ${v.rows[0].sku} (lote ${lote}).`];
+  if (repetidos.length) partes.push(`${repetidos.length} já existia(m): ${repetidos.map((x) => "…" + x.slice(-4)).join(", ")}.`);
+  if (invalidos.length) partes.push(`${invalidos.length} inválido(s) ignorado(s).`);
+  return { erro: inseridos === 0 ? partes.join(" ") : "", ok: inseridos === 0 ? "" : partes.join(" ") };
 }
