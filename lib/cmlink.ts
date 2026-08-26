@@ -400,8 +400,8 @@ export async function sincronizarCatalogo(): Promise<{ ok: boolean; total: numbe
 }
 
 export async function estadoDoChip(iccids: string[]): Promise<RespostaCmlink> {
-  // A doc manda um ARRAY sem accessToken (secao 6.9). Se a plataforma exigir
-  // token, a resposta guardada vai dizer — e ai a pergunta ao Haoran cai.
+  // A doc manda um ARRAY sem accessToken (secao 6.9). Provado 26/08: funciona
+  // assim mesmo (code 0, himsis[]).
   return chamarCmlink("SBO_query_SIMInfo/v1", iccids.map((iccid) => ({ iccid })), { operacao: "querySIMInfo" });
 }
 
@@ -417,15 +417,28 @@ export async function pacotesDoChip(iccid: string): Promise<RespostaCmlink> {
   );
 }
 
-export async function consumoDoChip(iccid: string): Promise<RespostaCmlink> {
-  return chamarComToken("APP_getSubscriberAllQuota_SBO/v1", { iccid }, { operacao: "getSubscriberAllQuota" });
+// Consumo: a plataforma EXIGE beginTime/endTime (provado 26/08: sem eles,
+// code 1 "The start time cannot be empty"). Janela padrao: ultimos 30 dias.
+function diaCm(d: Date): string {
+  return d.toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+export async function consumoDoChip(iccid: string, dias = 30): Promise<RespostaCmlink> {
+  const fim = new Date();
+  const ini = new Date(fim.getTime() - dias * 86400000);
+  return chamarComToken(
+    "APP_getSubscriberAllQuota_SBO/v1",
+    { iccid, beginTime: diaCm(ini), endTime: diaCm(fim) },
+    { operacao: "getSubscriberAllQuota" },
+  );
 }
 
 export async function localizacaoDoChip(iccid: string): Promise<RespostaCmlink> {
   return chamarComToken("APP_HIMSI_TERMSTATE_SBO/v1", { iccid }, { operacao: "himsiTermState" });
 }
 
-// O QR: a doc oscila entre `cardInfo` e `data`. Aceita os dois.
+// O QR: a doc oscila entre `cardInfo` e `data`. Provado 26/08: vem em `data`,
+// com `downloadUrl` ja no formato LPA:1$smdp$codigo. Aceita os dois.
 export function lpaDaResposta(r: RespostaCmlink): { lpa: string; smdp: string; codigo: string; estado: string; instalacoes: number | null } {
   const info = r.json?.cardInfo ?? r.json?.data ?? null;
   const smdp = String(info?.smdpAddress ?? "").trim();
