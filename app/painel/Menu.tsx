@@ -19,6 +19,9 @@ import { usePathname } from "next/navigation";
 //
 // Vitrines vem antes de Conexoes no grupo Canais: a loja propria se abre todo
 // dia para conferir; Conexoes trata dos marketplaces.
+//
+// Operadoras (26/08/2026): quem PROVISIONA o eSIM sob demanda — China Mobile
+// primeiro. Chaves, testes e compra manual por botao; doc da API dentro.
 const AREAS = [
   {
     grupo: "Operação",
@@ -47,7 +50,7 @@ const AREAS = [
   },
   {
     grupo: "Entrega",
-    itens: [{ href: "/painel/operadoras", rotulo: "Operadoras", pronto: false, exato: false }],
+    itens: [{ href: "/painel/operadoras", rotulo: "Operadoras", pronto: true, exato: false }],
   },
   {
     grupo: "Sistema",
