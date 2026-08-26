@@ -34,6 +34,16 @@ function chamada(titulo: string, r: RespostaCmlink | null): Chamada {
   };
 }
 
+// Chave colada da mensagem do fornecedor vem com rotulo ("appkey：..."), espaco
+// ou quebra de linha. Tirar tudo isso aqui poupa o operador de descobrir na
+// mao o que a tela recusou.
+function limparChave(v: unknown): string {
+  return String(v ?? "")
+    .replace(/^\s*app\s*(key|secret)\s*[:：=]\s*/i, "")
+    .replace(/[\s​ 　]+/g, "")
+    .trim();
+}
+
 const VAZIO: EstadoChamadas = { erro: "", ok: "", chamadas: [], lpa: "", qrPng: "" };
 
 // ---------------------------------------------------------------- config
@@ -65,8 +75,8 @@ export async function salvarConfigAcao(_a: EstadoSimples, form: FormData): Promi
 export async function salvarChaveAcao(_a: EstadoSimples, form: FormData): Promise<EstadoSimples> {
   const u = await autorizar(ADMIN);
   if ("erro" in u) return { erro: u.erro, ok: "" };
-  const appkey = String(form.get("appkey") ?? "").trim();
-  if (appkey.length < 4 || /\s/.test(appkey)) return { erro: "AppKey inválida.", ok: "" };
+  const appkey = limparChave(form.get("appkey"));
+  if (appkey.length < 4) return { erro: "AppKey inválida: cole só a chave (sem rótulo, espaço ou quebra de linha).", ok: "" };
   try {
     await salvarSegredoApp(CMLINK.envKey, appkey, u.id);
   } catch (e: any) {
@@ -81,8 +91,8 @@ export async function salvarChaveAcao(_a: EstadoSimples, form: FormData): Promis
 export async function salvarSegredoAcao(_a: EstadoSimples, form: FormData): Promise<EstadoSimples> {
   const u = await autorizar(ADMIN);
   if ("erro" in u) return { erro: u.erro, ok: "" };
-  const s = String(form.get("appsecret") ?? "").trim();
-  if (s.length < 8) return { erro: "AppSecret muito curta. Cole inteira.", ok: "" };
+  const s = limparChave(form.get("appsecret"));
+  if (s.length < 8) return { erro: "AppSecret muito curta. Cole inteira (sem rótulo, espaço ou quebra de linha).", ok: "" };
   try {
     await salvarSegredoApp(CMLINK.envSecret, s, u.id);
   } catch (e: any) {
