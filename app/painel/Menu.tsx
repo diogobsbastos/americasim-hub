@@ -23,6 +23,9 @@ import { usePathname } from "next/navigation";
 // Operadoras (26/08/2026): quem PROVISIONA o eSIM sob demanda — China Mobile
 // primeiro. Chaves, testes e compra manual por botao; doc da API dentro.
 //
+// Requisicoes (01/09/2026): o ciclo de ICCIDs com a EasySim4u — requisitar por
+// e-mail, aprovar o CSV recebido, estoque carregado com confirmacao automatica.
+//
 // Google & E-mail (01/09/2026): credenciais do Google pela tela — login das
 // lojas (OAuth) e o Gmail do robo de requisicoes (senha de app), no cofre.
 const AREAS = [
@@ -53,7 +56,10 @@ const AREAS = [
   },
   {
     grupo: "Entrega",
-    itens: [{ href: "/painel/operadoras", rotulo: "Operadoras", pronto: true, exato: false }],
+    itens: [
+      { href: "/painel/operadoras", rotulo: "Operadoras", pronto: true, exato: false },
+      { href: "/painel/requisicoes", rotulo: "Requisições", pronto: true, exato: false },
+    ],
   },
   {
     grupo: "Sistema",
