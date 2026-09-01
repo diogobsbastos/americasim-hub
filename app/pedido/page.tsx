@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { apiGet, chaveConfigurada } from "../../lib/vitrine";
 import { marcaAtual } from "../../lib/marcas";
-import FormAtivacao from "./FormAtivacao";
+import CartaoEsim, { type AtivacaoTela } from "./CartaoEsim";
+import AtualizaSozinho from "./AtualizaSozinho";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +12,6 @@ export async function generateMetadata() {
     title: `Seu pedido — ${m.nome}`,
     robots: { index: false, follow: false },
   };
-}
-
-interface Ativacao {
-  id: string;
-  status: string;
 }
 
 export default async function Pedido({
@@ -81,7 +77,13 @@ export default async function Pedido({
   }
 
   const p = r.dados ?? {};
-  const ativacoes: Ativacao[] = p.ativacoes ?? [];
+  const ativacoes: AtivacaoTela[] = p.ativacoes ?? [];
+
+  // A tela se mantem viva sozinha enquanto ha o que esperar: rapido durante a
+  // preparacao, devagar esperando a instalacao, desligada quando tudo instalou.
+  const esperandoEntrega = !p.entregue;
+  const esperandoInstalacao =
+    p.entregue && ativacoes.some((a) => a.status !== "instalado" && a.status !== "falhou");
 
   return (
     <main className="wrap">
@@ -115,14 +117,20 @@ export default async function Pedido({
           ) : null}
         </div>
 
-        {p.entregue && ativacoes.length > 0 ? (
-          ativacoes.map((a) => <FormAtivacao key={a.id} ativacaoId={a.id} />)
+        {ativacoes.length > 0 ? (
+          ativacoes.map((a) => <CartaoEsim key={a.id} a={a} />)
         ) : (
           <p className="nota">
-            Estamos separando o seu eSIM. Esta pagina se atualiza a cada recarga — guarde o
-            link, ele e a sua chave de acesso ao pedido.
+            Estamos separando o seu eSIM. Esta pagina se atualiza sozinha — e o link e a sua
+            chave de acesso ao pedido, guarde-o.
           </p>
         )}
+
+        {esperandoEntrega ? (
+          <AtualizaSozinho aCadaMs={20_000} />
+        ) : esperandoInstalacao ? (
+          <AtualizaSozinho aCadaMs={60_000} />
+        ) : null}
 
         <p className="nota">
           <Link href="/">Voltar para a loja</Link>
