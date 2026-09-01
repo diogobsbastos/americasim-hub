@@ -22,6 +22,9 @@ import { usePathname } from "next/navigation";
 //
 // Operadoras (26/08/2026): quem PROVISIONA o eSIM sob demanda — China Mobile
 // primeiro. Chaves, testes e compra manual por botao; doc da API dentro.
+//
+// Google & E-mail (01/09/2026): credenciais do Google pela tela — login das
+// lojas (OAuth) e o Gmail do robo de requisicoes (senha de app), no cofre.
 const AREAS = [
   {
     grupo: "Operação",
@@ -55,6 +58,7 @@ const AREAS = [
   {
     grupo: "Sistema",
     itens: [
+      { href: "/painel/google", rotulo: "Google & E-mail", pronto: true, exato: false },
       { href: "/painel/marketing", rotulo: "Marketing", pronto: false, exato: false },
       { href: "/painel/config", rotulo: "Configuração", pronto: false, exato: false },
     ],

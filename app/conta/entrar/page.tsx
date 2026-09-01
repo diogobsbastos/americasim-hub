@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { marcaAtual } from "../../../lib/marcas";
 import FormEntrar from "../FormEntrar";
+import { googleConfigurado } from "../../../lib/google";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function Entrar({
   const sp = await searchParams;
   // O botao so aparece quando o Google esta configurado no servidor — melhor
   // nao existir do que existir quebrado.
-  const temGoogle = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  const temGoogle = await googleConfigurado();
   const aviso = sp.erro === "google" ? "Nao foi possivel entrar com o Google. Tente de novo ou use e-mail e senha." : "";
 
   return (

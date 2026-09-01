@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { apiPost, basePublica } from "../../../../lib/vitrine";
 import { COOKIE_SESSAO, DIAS_SESSAO } from "../../../../lib/conta";
+import { configGoogle } from "../../../../lib/google";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ function estadoValido(estado: string): boolean {
 
 export async function GET(req: Request) {
   const base = await basePublica();
+  const { clientId, clientSecret } = await configGoogle();
   const falha = (motivo: string) => {
     console.error(`conta/google/volta: ${motivo}`);
     return Response.redirect(`${base}/conta/entrar?erro=google`, 302);
@@ -52,8 +54,8 @@ export async function GET(req: Request) {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code,
-        client_id: process.env.GOOGLE_CLIENT_ID ?? "",
-        client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+        client_id: clientId,
+        client_secret: clientSecret,
         redirect_uri: `${base}/conta/google/volta`,
         grant_type: "authorization_code",
       }),
@@ -71,7 +73,7 @@ export async function GET(req: Request) {
     const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
     const j: any = await r.json();
     if (!r.ok) return falha(`tokeninfo falhou: HTTP ${r.status}`);
-    if (j?.aud !== process.env.GOOGLE_CLIENT_ID) return falha("id_token de outro client_id");
+    if (j?.aud !== clientId) return falha("id_token de outro client_id");
     sub = String(j?.sub ?? "");
     email = String(j?.email ?? "").toLowerCase();
     emailVerificado = j?.email_verified === "true" || j?.email_verified === true;

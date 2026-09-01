@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { marcaAtual } from "../../../lib/marcas";
 import FormCriar from "../FormCriar";
+import { googleConfigurado } from "../../../lib/google";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function generateMetadata() {
 
 export default async function Criar() {
   const marca = await marcaAtual();
-  const temGoogle = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  const temGoogle = await googleConfigurado();
 
   return (
     <main className="wrap">

@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { basePublica } from "../../../lib/vitrine";
+import { configGoogle } from "../../../lib/google";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,8 @@ function assinarEstado(): string {
 }
 
 export async function GET() {
-  const clientId = process.env.GOOGLE_CLIENT_ID ?? "";
-  if (!clientId || !process.env.GOOGLE_CLIENT_SECRET) {
+  const { clientId, clientSecret } = await configGoogle();
+  if (!clientId || !clientSecret) {
     return Response.redirect(`${await basePublica()}/conta/entrar?erro=google`, 302);
   }
 
