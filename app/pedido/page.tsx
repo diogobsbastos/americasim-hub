@@ -134,6 +134,8 @@ export default async function Pedido({
 
         <p className="nota">
           <Link href="/">Voltar para a loja</Link>
+          {" · "}
+          <Link href="/conta">Meus pedidos</Link>
         </p>
       </section>
     </main>
