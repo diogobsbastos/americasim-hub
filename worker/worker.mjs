@@ -1,12 +1,18 @@
 // AmericaSim Worker — consumidor do outbox (evento_saida).
 // Processo Node PURO, sem Next. Regra de negocio vem do banco; aqui so despacho.
 // Retentativa com espera crescente por linha; heartbeat em arquivo para a sentinela.
+//
+// POR DEMANDA (01/09/2026): o worker nao vigia mais a cada 5s. Ele fica em
+// LISTEN 'evento_novo' — a campainha que a migracao 013 instalou na outbox — e
+// acorda em milissegundos quando um evento e gravado. O relogio de 60s que
+// resta e REDE DE SEGURANCA (aviso perdido numa reconexao, retentativa de
+// e-mail devida), nao ciclo de trabalho.
 import pg from "pg";
 import { writeFileSync } from "node:fs";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
 const HEARTBEAT = process.env.WORKER_HEARTBEAT || "/tmp/americasim-worker.heartbeat";
-const INTERVALO_MS = 5000;
+const OCIOSO_MS = 60000;
 
 // O hub, na propria maquina.
 const HUB = process.env.HUB_INTERNO || "http://127.0.0.1:3002";
@@ -63,8 +69,8 @@ async function despachar(c, ev) {
   const p = ev.payload || {};
   if (ev.tipo === "entrega.notificar") {
     // Dedup NO BANCO: (destino, canal, referencia). Webhook duplicado nunca
-    // gera segundo e-mail (SPEC/04 3.5). O envio real entra quando houver
-    // provedor transacional (Resend/SES); ate la a notificacao fica 'pendente'.
+    // gera segundo e-mail (SPEC/04 3.5). O envio real acontece logo depois do
+    // drenar: o loop chama /v1/interno/email/despachar, que processa a fila.
     await c.query(
       `insert into notificacao (destino, canal, referencia, modelo, payload)
        select cli.email::text, 'email', 'entrega_qr:' || ped.numero, 'entrega_qr', $2::jsonb
@@ -157,17 +163,79 @@ async function tick() {
   }
 }
 
+// ------------------------------------------------------------- a campainha
+// Conexao dedicada em LISTEN. Aviso durante o processamento nao se perde: vira
+// `avisoPendente`, e o proximo `esperar()` volta na hora. Conexao caiu?
+// Reconecta sozinha — e o relogio de 60s cobre o vao ate ela voltar.
+let acordar = null;
+let avisoPendente = false;
+
+function tocar() {
+  if (acordar) acordar();
+  else avisoPendente = true;
+}
+
+function esperar(ms) {
+  if (avisoPendente) {
+    avisoPendente = false;
+    return Promise.resolve();
+  }
+  return new Promise((r) => {
+    const t = setTimeout(() => { acordar = null; r(); }, ms);
+    acordar = () => { clearTimeout(t); acordar = null; r(); };
+  });
+}
+
+async function ligarCampainha() {
+  for (;;) {
+    const cliente = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    try {
+      await cliente.connect();
+      await cliente.query("listen evento_novo");
+      console.log("worker: campainha ligada (LISTEN evento_novo)");
+      cliente.on("notification", tocar);
+      await new Promise((_, falha) => {
+        cliente.on("error", falha);
+        cliente.on("end", () => falha(new Error("conexao encerrada")));
+      });
+    } catch (e) {
+      console.error("worker: campainha caiu:", String(e).slice(0, 200));
+    }
+    try { await cliente.end(); } catch {}
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+}
+
 async function main() {
-  console.log("americasim-worker: iniciado");
+  console.log("americasim-worker: iniciado (por demanda: LISTEN + rede de seguranca 60s)");
+  ligarCampainha();
   for (;;) {
     try {
       let houve = true;
       while (houve) houve = await tick();
+
+      // E-mails da fila `notificacao`: logo apos os eventos (o entrega.notificar
+      // acabou de inserir) e tambem como retentativa dos que falharam.
+      try {
+        const r = await chamarHub("/v1/interno/email/despachar", {});
+        if (r?.enviadas) console.log(`e-mails: ${r.enviadas} enviado(s)`);
+      } catch (e) {
+        console.error("e-mails:", String(e).slice(0, 200));
+      }
+
+      // Caixa do Gmail (IMAP IDLE mora no hub): este toque so GARANTE que a
+      // conexao esta viva — quem avisa da chegada de e-mail e o proprio Google.
+      try {
+        await chamarHub("/v1/interno/email/caixa", {});
+      } catch (e) {
+        console.error("caixa:", String(e).slice(0, 200));
+      }
+
       writeFileSync(HEARTBEAT, new Date().toISOString());
     } catch (e) {
       console.error("worker: erro no ciclo:", String(e).slice(0, 300));
     }
-    await new Promise((r) => setTimeout(r, INTERVALO_MS));
+    await esperar(OCIOSO_MS);
   }
 }
 
