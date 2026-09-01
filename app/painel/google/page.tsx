@@ -1,4 +1,4 @@
-import { ondeEstaOSegredo } from "../../../lib/segredo-app";
+import { lerSegredoApp, ondeEstaOSegredo } from "../../../lib/segredo-app";
 import {
   SEG_GMAIL_SENHA, SEG_GMAIL_USUARIO, SEG_GOOGLE_ID, SEG_GOOGLE_SECRET,
 } from "../../../lib/google";
@@ -15,11 +15,15 @@ export default async function GoogleEEmail() {
   const u = await usuarioDaSessao();
   const podeAdmin = u?.papel === "admin";
 
-  const [ondeId, ondeSecret, ondeUsuario, ondeSenha] = await Promise.all([
+  const [ondeId, ondeSecret, ondeUsuario, ondeSenha, valorId, valorUsuario] = await Promise.all([
     ondeEstaOSegredo(SEG_GOOGLE_ID),
     ondeEstaOSegredo(SEG_GOOGLE_SECRET),
     ondeEstaOSegredo(SEG_GMAIL_USUARIO),
     ondeEstaOSegredo(SEG_GMAIL_SENHA),
+    // Client ID e usuario NAO sao segredos: a tela mostra o valor gravado.
+    // Secret e senha de app continuam write-only (so status).
+    lerSegredoApp(SEG_GOOGLE_ID),
+    lerSegredoApp(SEG_GMAIL_USUARIO),
   ]);
 
   return (
@@ -38,6 +42,8 @@ export default async function GoogleEEmail() {
         ondeSecret={ondeSecret}
         ondeUsuario={ondeUsuario}
         ondeSenha={ondeSenha}
+        valorId={valorId}
+        valorUsuario={valorUsuario}
         podeAdmin={!!podeAdmin}
       />
     </>

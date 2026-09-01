@@ -23,11 +23,15 @@ const rotulo = { display: "block", fontSize: "0.78rem", color: "var(--texto-frac
 const campo = { width: "100%", maxWidth: 520 } as const;
 
 // Dois cofres na mesma tela: o LOGIN das lojas (OAuth) e o GMAIL do robo
-// (senha de app). Valor nunca volta para a tela — so o status de onde esta.
+// (senha de app). O que NAO e segredo (Client ID, usuario) aparece gravado no
+// campo; Secret e senha de app sao write-only — so o status de onde estao.
+// Formularios com autofill desligado: o navegador enchia os campos com o login
+// PESSOAL do operador e um Guardar descuidado sobrescreveria o valor certo.
 export default function CartaoGoogle({
-  ondeId, ondeSecret, ondeUsuario, ondeSenha, podeAdmin,
+  ondeId, ondeSecret, ondeUsuario, ondeSenha, valorId, valorUsuario, podeAdmin,
 }: {
-  ondeId: string; ondeSecret: string; ondeUsuario: string; ondeSenha: string; podeAdmin: boolean;
+  ondeId: string; ondeSecret: string; ondeUsuario: string; ondeSenha: string;
+  valorId: string; valorUsuario: string; podeAdmin: boolean;
 }) {
   const [eL, aL, pL] = useActionState(salvarLoginGoogle, ESTADO_GOOGLE_INICIAL);
   const [eTL, aTL, pTL] = useActionState(testarLoginGoogleAcao, ESTADO_GOOGLE_INICIAL);
@@ -48,11 +52,11 @@ export default function CartaoGoogle({
           Client Secret: <b>{st(ondeSecret)}</b>. O botão aparece nas lojas quando os dois existem.
         </p>
         {podeAdmin ? (
-          <form action={aL}>
+          <form action={aL} autoComplete="off">
             <label style={rotulo} htmlFor="gid">Client ID (termina em .apps.googleusercontent.com)</label>
-            <input id="gid" name="client_id" style={campo} autoComplete="off" disabled={pL} />
-            <label style={rotulo} htmlFor="gsec">Client Secret (começa com GOCSPX-)</label>
-            <input id="gsec" name="client_secret" type="password" style={campo} autoComplete="off" disabled={pL} />
+            <input id="gid" name="client_id" style={campo} defaultValue={valorId} autoComplete="off" disabled={pL} />
+            <label style={rotulo} htmlFor="gsec">Client Secret (começa com GOCSPX- · guardado, não reaparece por segurança)</label>
+            <input id="gsec" name="client_secret" type="password" style={campo} autoComplete="new-password" data-lpignore="true" disabled={pL} />
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               <button type="submit" disabled={pL}>{pL ? "Guardando…" : "Guardar no cofre"}</button>
             </div>
@@ -75,11 +79,11 @@ export default function CartaoGoogle({
           (verificação em 2 etapas ligada) — pode colar com espaços, a tela limpa.
         </p>
         {podeAdmin ? (
-          <form action={aG}>
+          <form action={aG} autoComplete="off">
             <label style={rotulo} htmlFor="gu">Usuário (e-mail completo)</label>
-            <input id="gu" name="usuario" style={campo} placeholder="americasimti@gmail.com" autoComplete="off" disabled={pG} />
-            <label style={rotulo} htmlFor="gs">Senha de app (16 caracteres)</label>
-            <input id="gs" name="senha_app" type="password" style={campo} autoComplete="off" disabled={pG} />
+            <input id="gu" name="usuario" style={campo} defaultValue={valorUsuario} autoComplete="off" disabled={pG} />
+            <label style={rotulo} htmlFor="gs">Senha de app (16 caracteres · guardada, não reaparece por segurança)</label>
+            <input id="gs" name="senha_app" type="password" style={campo} autoComplete="new-password" data-lpignore="true" disabled={pG} />
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               <button type="submit" disabled={pG}>{pG ? "Guardando…" : "Guardar no cofre"}</button>
             </div>
