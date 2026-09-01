@@ -1,11 +1,94 @@
-// GET /icone.png — o icone do "app" (PWA e apple-touch-icon), servido do
-// proprio codigo: o repositorio nao tem pasta public/ e um PNG pequeno embutido
-// evita criar infraestrutura de estaticos so para um arquivo.
-const PNG_BASE64 =
-  "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";
+import { deflateSync } from "node:zlib";
+
+// GET /icone.png — o icone do "app" (PWA e apple-touch-icon), DESENHADO por
+// codigo e codificado em PNG aqui mesmo (zlib do Node + CRC32). A primeira
+// versao embutia o PNG em base64 e o arquivo subiu truncado no push — imagem
+// corrompida silenciosa. Codigo que desenha nao trunca: ou compila e desenha
+// certo, ou nem builda. Gera uma vez e guarda em memoria.
+
+const L = 512;
+const NAVY = [15, 42, 74, 255];
+const BRANCO = [255, 255, 255, 255];
+const AZUL = [30, 90, 171, 255];
+const NADA = [0, 0, 0, 0];
+
+function dentroRetArredondado(x: number, y: number, x0: number, y0: number, x1: number, y1: number, r: number): boolean {
+  if (x < x0 || x > x1 || y < y0 || y > y1) return false;
+  if ((x >= x0 + r && x <= x1 - r) || (y >= y0 + r && y <= y1 - r)) return true;
+  const cx = Math.max(x0 + r, Math.min(x, x1 - r));
+  const cy = Math.max(y0 + r, Math.min(y, y1 - r));
+  return (x - cx) ** 2 + (y - cy) ** 2 <= r * r;
+}
+
+function corDoPixel(x: number, y: number): number[] {
+  if (!dentroRetArredondado(x, y, 0, 0, L - 1, L - 1, 96)) return NADA;
+  let cor = NAVY;
+  if (dentroRetArredondado(x, y, 136, 116, 376, 396, 36)) {
+    cor = BRANCO;
+    // entalhe de canto do SIM: triangulo superior direito do cartao branco
+    if (x >= 296 && y <= 196 && y - 116 <= x - 296) cor = NAVY;
+    // grade de contatos 3x3
+    for (const gx of [176, 232, 288]) {
+      for (const gy of [196, 256, 316]) {
+        if (dentroRetArredondado(x, y, gx, gy, gx + 40, gy + 44, 10)) cor = NAVY;
+      }
+    }
+  }
+  // sinal (canto inferior direito): ponto + dois quartos de anel
+  const dx = x - 356, dy = y - 380;
+  const d2 = dx * dx + dy * dy;
+  if (d2 <= 14 * 14) cor = AZUL;
+  if (dx >= 0 && dy <= 0) {
+    const d = Math.sqrt(d2);
+    if ((d >= 30 && d <= 42) || (d >= 54 && d <= 66)) cor = AZUL;
+  }
+  return cor;
+}
+
+function crc32(buf: Buffer): number {
+  let c: number, crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) {
+    c = (crc ^ buf[i]) & 0xff;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    crc = (crc >>> 8) ^ c;
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pedaco(tipo: string, dados: Buffer): Buffer {
+  const t = Buffer.from(tipo, "ascii");
+  const len = Buffer.alloc(4); len.writeUInt32BE(dados.length);
+  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(Buffer.concat([t, dados])));
+  return Buffer.concat([len, t, dados, crc]);
+}
+
+function gerarPng(): Buffer {
+  const linhas = Buffer.alloc(L * (1 + L * 4));
+  for (let y = 0; y < L; y++) {
+    const base = y * (1 + L * 4);
+    linhas[base] = 0; // filtro none
+    for (let x = 0; x < L; x++) {
+      const [r, g, b, a] = corDoPixel(x, y);
+      const o = base + 1 + x * 4;
+      linhas[o] = r; linhas[o + 1] = g; linhas[o + 2] = b; linhas[o + 3] = a;
+    }
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(L, 0); ihdr.writeUInt32BE(L, 4);
+  ihdr[8] = 8; ihdr[9] = 6; // 8 bits, RGBA
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pedaco("IHDR", ihdr),
+    pedaco("IDAT", deflateSync(linhas, { level: 9 })),
+    pedaco("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+let cache: Buffer | null = null;
 
 export async function GET() {
-  return new Response(Buffer.from(PNG_BASE64, "base64"), {
+  if (!cache) cache = gerarPng();
+  return new Response(new Uint8Array(cache), {
     headers: {
       "Content-Type": "image/png",
       "Cache-Control": "public, max-age=86400",
