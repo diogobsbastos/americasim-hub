@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { aprovarLoteAcao, enviarRequisicaoAcao, rejeitarLoteAcao, salvarConfigReqAcao } from "./acoes";
+import { aprovarLoteAcao, enviarRequisicaoAcao, rejeitarLoteAcao, salvarConfigReqAcao, testarZapAcao } from "./acoes";
 import { ESTADO_REQ_INICIAL } from "./tipos";
 
 export interface LoteTela {
@@ -40,11 +40,12 @@ function Resultado({ e }: { e: { erro: string; ok: string } }) {
 }
 
 const rotulo = { display: "block", fontSize: "0.78rem", color: "var(--texto-fraco)", margin: "10px 0 4px" } as const;
+const campo = { width: "100%", maxWidth: 520 } as const;
 
 export default function CartaoRequisicoes({
-  destino, remetentes, zap, caixaLigada, caixaErro, lotes, requisicoes, variantes, podeAdmin, podeOperar,
+  destino, remetentes, zapInstancia, zapDestino, zapApikeyOnde, caixaLigada, caixaErro, lotes, requisicoes, variantes, podeAdmin, podeOperar,
 }: {
-  destino: string; remetentes: string; zap: string;
+  destino: string; remetentes: string; zapInstancia: string; zapDestino: string; zapApikeyOnde: string;
   caixaLigada: boolean; caixaErro: string;
   lotes: LoteTela[]; requisicoes: RequisicaoTela[]; variantes: VarianteOpcao[];
   podeAdmin: boolean; podeOperar: boolean;
@@ -53,24 +54,26 @@ export default function CartaoRequisicoes({
   const [eApr, aApr, pApr] = useActionState(aprovarLoteAcao, ESTADO_REQ_INICIAL);
   const [eRej, aRej, pRej] = useActionState(rejeitarLoteAcao, ESTADO_REQ_INICIAL);
   const [eCfg, aCfg, pCfg] = useActionState(salvarConfigReqAcao, ESTADO_REQ_INICIAL);
+  const [eZap, aZap, pZap] = useActionState(testarZapAcao, ESTADO_REQ_INICIAL);
 
   const pendentes = lotes.filter((l) => l.status === "pendente");
   const tratados = lotes.filter((l) => l.status !== "pendente");
+  const zapPronto = Boolean(zapInstancia && zapDestino && zapApikeyOnde !== "nenhum");
 
   return (
     <>
       <div className="cartao" style={{ marginBottom: 18 }}>
         <h2 style={{ fontSize: "0.95rem", textTransform: "uppercase", margin: "0 0 6px" }}>Requisitar ICCIDs</h2>
         <p className="nota" style={{ marginTop: 0 }}>
-          Envia o e-mail padrão para <b>{destino}</b>. A resposta com o CSV entra sozinha na lista
+          Envia o e-mail padrão para <b>{destino}</b> e avisa no Zap. A resposta com o CSV entra sozinha na lista
           abaixo — o Gmail avisa o robô na hora ({caixaLigada ? "caixa conectada ✅" : `caixa desconectada ⚠️${caixaErro ? ` — ${caixaErro}` : ""}`}).
         </p>
         {podeOperar ? (
           <form action={aReq}>
             <label style={rotulo} htmlFor="rq">Quantidade de ICCIDs</label>
             <input id="rq" name="quantidade" type="number" min={1} max={10000} required style={{ width: 140 }} disabled={pReq} />
-            <label style={rotulo} htmlFor="ro">Observação (opcional — vai no e-mail)</label>
-            <input id="ro" name="observacao" style={{ width: "100%", maxWidth: 520 }} disabled={pReq} />
+            <label style={rotulo} htmlFor="ro">Observação (opcional — vai no e-mail e no Zap)</label>
+            <input id="ro" name="observacao" style={campo} disabled={pReq} />
             <div style={{ marginTop: 12 }}>
               <button type="submit" disabled={pReq}>{pReq ? "Enviando…" : "Enviar requisição"}</button>
             </div>
@@ -89,6 +92,7 @@ export default function CartaoRequisicoes({
         <p className="nota" style={{ marginTop: 0 }}>
           CSV que chega por e-mail vira lote pendente — nada entra no estoque sem um clique seu.
           Com código LPA no arquivo, o eSIM entra pronto para vender; só ICCID entra como pool.
+          Aprovação responde o e-mail do remetente e avisa no Zap.
         </p>
         {pendentes.length === 0 ? <p className="nota">Nenhum lote pendente.</p> : null}
         {pendentes.map((l) => (
@@ -133,22 +137,33 @@ export default function CartaoRequisicoes({
 
       <div className="cartao" style={{ marginBottom: 18 }}>
         <h2 style={{ fontSize: "0.95rem", textTransform: "uppercase", margin: "0 0 6px" }}>Configuração</h2>
+        <p className="nota" style={{ marginTop: 0 }}>
+          Zap: {zapPronto ? "✅ configurado" : "— faltam campos"} · API key da Evolution: <b>{zapApikeyOnde === "banco" ? "✅ no cofre" : zapApikeyOnde === "ambiente" ? "✅ no .env" : "— vazia"}</b>
+        </p>
         {podeAdmin ? (
-          <form action={aCfg}>
+          <form action={aCfg} autoComplete="off">
             <label style={rotulo} htmlFor="cd">Destino da requisição (e-mail da EasySim4u)</label>
-            <input id="cd" name="destino" defaultValue={destino} style={{ width: "100%", maxWidth: 520 }} disabled={pCfg} />
+            <input id="cd" name="destino" defaultValue={destino} style={campo} disabled={pCfg} />
             <label style={rotulo} htmlFor="cr">Remetentes autorizados a mandar CSV (vírgula; “@dominio.com” autoriza o domínio inteiro)</label>
-            <input id="cr" name="remetentes" defaultValue={remetentes} style={{ width: "100%", maxWidth: 520 }} disabled={pCfg} />
-            <label style={rotulo} htmlFor="cz">Webhook do Zap (opcional — vazio desliga o push)</label>
-            <input id="cz" name="zap" defaultValue={zap} style={{ width: "100%", maxWidth: 520 }} disabled={pCfg} />
-            <div style={{ marginTop: 12 }}>
+            <input id="cr" name="remetentes" defaultValue={remetentes} style={campo} disabled={pCfg} />
+            <label style={rotulo} htmlFor="czi">Zap — instância da Evolution (ex.: americasim)</label>
+            <input id="czi" name="zap_instancia" defaultValue={zapInstancia} style={campo} disabled={pCfg} />
+            <label style={rotulo} htmlFor="czd">Zap — número destino (só dígitos, com DDI: 55219…)</label>
+            <input id="czd" name="zap_destino" defaultValue={zapDestino} style={campo} disabled={pCfg} />
+            <label style={rotulo} htmlFor="cza">Zap — API key da Evolution (guardada, não reaparece)</label>
+            <input id="cza" name="zap_apikey" type="password" autoComplete="new-password" data-lpignore="true" style={campo} disabled={pCfg} />
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               <button type="submit" disabled={pCfg}>{pCfg ? "Guardando…" : "Guardar"}</button>
             </div>
           </form>
         ) : (
           <p className="nota">Destino: <b>{destino}</b> · Remetentes: <b>{remetentes}</b></p>
         )}
+        <form action={aZap} style={{ marginTop: 10 }}>
+          <button type="submit" className="secundario" disabled={pZap}>{pZap ? "Enviando…" : "Testar Zap (manda mensagem de verdade)"}</button>
+        </form>
         <Resultado e={eCfg} />
+        <Resultado e={eZap} />
       </div>
     </>
   );

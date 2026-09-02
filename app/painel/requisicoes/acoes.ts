@@ -7,6 +7,7 @@ import { db } from "../../../lib/db";
 import { enviarEmailGmail } from "../../../lib/email";
 import { parsearCsv } from "../../../lib/caixa-imap";
 import { cifrarCodigo, impressaoCodigo } from "../../../lib/cripto-esim";
+import { lerSegredoApp, salvarSegredoApp } from "../../../lib/segredo-app";
 import { auditar, usuarioDaSessao } from "../../../lib/painel/sessao";
 import type { EstadoReq } from "./tipos";
 
@@ -36,21 +37,43 @@ async function gravarParametro(chave: string, valor: string, descricao: string, 
   );
 }
 
-// Push no Zap: adaptador minimo — um webhook configuravel (Evolution, Cloud
-// API ou qualquer ponte). Sem webhook configurado, silencio; falha NUNCA
-// derruba o fluxo principal (aviso e cortesia, estoque e a verdade).
-async function avisarZap(texto: string): Promise<void> {
+// Push no Zap — Evolution API (roda NESTE servidor, porta interna 8080).
+// Config: zap.instancia + zap.destino em parametro; ZAP_APIKEY no cofre;
+// zap.url so muda se a Evolution sair desta maquina. zap.webhook generico
+// continua valendo como alternativa (qualquer ponte que aceite POST {texto}).
+// Falha NUNCA derruba o fluxo principal — aviso e cortesia, estoque e a verdade.
+async function avisarZap(texto: string): Promise<{ ok: boolean; detalhe: string }> {
   try {
-    const url = await lerParametro("zap.webhook");
-    if (!url) return;
-    await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ texto }),
-      signal: AbortSignal.timeout(10000),
-    });
+    const instancia = await lerParametro("zap.instancia");
+    const destino = (await lerParametro("zap.destino")).replace(/\D/g, "");
+    const apikey = await lerSegredoApp("ZAP_APIKEY");
+    if (instancia && destino && apikey) {
+      const base = (await lerParametro("zap.url", "http://127.0.0.1:8080")).replace(/\/+$/, "");
+      const r = await fetch(`${base}/message/sendText/${encodeURIComponent(instancia)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", apikey },
+        body: JSON.stringify({ number: destino, text: texto }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const corpo = await r.text();
+      if (!r.ok) return { ok: false, detalhe: `Evolution respondeu ${r.status}: ${corpo.slice(0, 250)}` };
+      return { ok: true, detalhe: `enviado para ${destino} via instância ${instancia}` };
+    }
+    const webhook = await lerParametro("zap.webhook");
+    if (webhook) {
+      await fetch(webhook, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ texto }),
+        signal: AbortSignal.timeout(10000),
+      });
+      return { ok: true, detalhe: "enviado ao webhook genérico" };
+    }
+    return { ok: false, detalhe: "Zap não configurado (instância + destino + API key, ou webhook)." };
   } catch (e) {
-    console.error("zap:", String(e).slice(0, 200));
+    const msg = String(e).slice(0, 200);
+    console.error("zap:", msg);
+    return { ok: false, detalhe: msg };
   }
 }
 
@@ -62,16 +85,30 @@ export async function salvarConfigReqAcao(_a: EstadoReq, form: FormData): Promis
 
   const destino = String(form.get("destino") ?? "").trim().toLowerCase();
   const remetentes = String(form.get("remetentes") ?? "").trim().toLowerCase();
-  const zap = String(form.get("zap") ?? "").trim();
+  const zapInstancia = String(form.get("zap_instancia") ?? "").trim();
+  const zapDestino = String(form.get("zap_destino") ?? "").replace(/\D/g, "");
+  const zapApikey = String(form.get("zap_apikey") ?? "").replace(/\s+/g, "");
   if (destino && !destino.includes("@")) return { erro: "Destino deve ser um e-mail.", ok: "" };
 
   if (destino) await gravarParametro("requisicao.destino", destino, "Para onde vai a requisicao de ICCIDs", u.id);
-  if (remetentes) await gravarParametro("caixa.remetentes", remetentes, "Remetentes autorizados a mandar CSV (separados por virgula; @dominio.com autoriza o dominio)", u.id);
-  await gravarParametro("zap.webhook", zap, "Webhook de push no WhatsApp (vazio = desligado)", u.id);
+  if (remetentes) await gravarParametro("caixa.remetentes", remetentes, "Remetentes autorizados a mandar CSV (virgula; @dominio.com autoriza o dominio)", u.id);
+  await gravarParametro("zap.instancia", zapInstancia, "Instancia da Evolution API (vazio = Zap desligado)", u.id);
+  await gravarParametro("zap.destino", zapDestino, "Numero/grupo que recebe os avisos (so digitos, com DDI)", u.id);
+  if (zapApikey) await salvarSegredoApp("ZAP_APIKEY", zapApikey, u.id);
 
-  await auditar("requisicoes.config", { usuarioId: u.id, entidade: "parametro", depois: { destino, remetentes, zap: zap ? "configurado" : "desligado" } });
+  await auditar("requisicoes.config", {
+    usuarioId: u.id, entidade: "parametro",
+    depois: { destino, remetentes, zapInstancia, zapDestino, zapApikey: zapApikey ? "gravada" : "mantida" },
+  });
   revalidatePath(CAMINHO);
   return { erro: "", ok: "Configuração guardada." };
+}
+
+export async function testarZapAcao(_a: EstadoReq): Promise<EstadoReq> {
+  const u = await autorizar(OPERACAO);
+  if ("erro" in u) return { erro: u.erro, ok: "" };
+  const r = await avisarZap("🤖 Teste do robô AmericaSim — Zap conectado e funcionando.");
+  return r.ok ? { erro: "", ok: `Zap OK: ${r.detalhe}` } : { erro: `Zap falhou: ${r.detalhe}`, ok: "" };
 }
 
 // ---------------------------------------------------------------- requisicao
@@ -107,9 +144,9 @@ export async function enviarRequisicaoAcao(_a: EstadoReq, form: FormData): Promi
     [destino, assunto, observacao, quantidade, u.id],
   );
   await auditar("requisicoes.enviar", { usuarioId: u.id, entidade: "requisicao_iccid", depois: { destino, quantidade } });
-  await avisarZap(`📤 Requisição de ${quantidade} ICCIDs enviada para ${destino}.`);
+  const z = await avisarZap(`📤 AmericaSim: requisição de ${quantidade} ICCID(s) enviada para ${destino}.${observacao ? ` Obs: ${observacao}` : ""}`);
   revalidatePath(CAMINHO);
-  return { erro: "", ok: `Requisição de ${quantidade} ICCIDs enviada para ${destino}.` };
+  return { erro: "", ok: `Requisição de ${quantidade} ICCIDs enviada para ${destino}. Zap: ${z.ok ? "avisado" : z.detalhe}` };
 }
 
 // ---------------------------------------------------------------- lotes
@@ -193,9 +230,9 @@ export async function aprovarLoteAcao(_a: EstadoReq, form: FormData): Promise<Es
       [loteId, varianteId, u.id, JSON.stringify({ inseridos, com_codigo: comCodigo, repetidos, email_confirmacao: emailConfirmacao })],
     );
     await auditar("requisicoes.aprovar", { usuarioId: u.id, entidade: "email_lote", depois: { loteId, varianteId, inseridos, repetidos } });
-    await avisarZap(`📥 Lote de ICCIDs aprovado: ${inseridos} carregado(s) no estoque (${repetidos} repetidos). Confirmação por e-mail: ${emailConfirmacao}.`);
+    const z = await avisarZap(`📥 AmericaSim: lote de ICCIDs aprovado — ${inseridos} carregado(s) no estoque (${repetidos} repetidos). Confirmação por e-mail: ${emailConfirmacao}.`);
     revalidatePath(CAMINHO);
-    return { erro: "", ok: `Lote aprovado: ${inseridos} no estoque (${comCodigo} com QR pronto, ${repetidos} repetidos). E-mail de confirmação: ${emailConfirmacao}.` };
+    return { erro: "", ok: `Lote aprovado: ${inseridos} no estoque (${comCodigo} com QR pronto, ${repetidos} repetidos). E-mail: ${emailConfirmacao}. Zap: ${z.ok ? "avisado" : z.detalhe}` };
   } catch (e: any) {
     await db.query(`update email_lote set status = 'pendente' where id = $1 and status = 'aprovando'`, [loteId]);
     return { erro: String(e?.message ?? e), ok: "" };
