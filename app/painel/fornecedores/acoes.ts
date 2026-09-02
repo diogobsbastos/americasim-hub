@@ -17,8 +17,10 @@ export async function criarFornecedor(_a: EstadoForn, form: FormData): Promise<E
 
   const nome = String(form.get("nome") ?? "").trim();
   const contato = String(form.get("contato") ?? "").trim();
+  const email = String(form.get("email") ?? "").trim().toLowerCase();
   if (!nome) return { erro: "O nome do fornecedor e obrigatorio.", ok: "" };
   if (nome.length > 80) return { erro: "Nome longo demais (maximo 80).", ok: "" };
+  if (email && !email.includes("@")) return { erro: "E-mail de requisicao invalido.", ok: "" };
 
   // Nome repetido nao e erro de digitacao inocente: dois "T-Mobile" fazem o
   // relatorio de custo por fornecedor somar metade em cada um e mentir nos dois.
@@ -29,7 +31,7 @@ export async function criarFornecedor(_a: EstadoForn, form: FormData): Promise<E
   try {
     const r = await db.query(
       "insert into fornecedor (nome, contato, ativo) values ($1, $2::jsonb, true) returning id",
-      [nome, JSON.stringify(contato ? { nota: contato } : {})],
+      [nome, JSON.stringify({ ...(contato ? { nota: contato } : {}), ...(email ? { email } : {}) })],
     );
     id = r.rows[0].id;
   } catch (e) {
@@ -48,6 +50,38 @@ export async function criarFornecedor(_a: EstadoForn, form: FormData): Promise<E
   revalidatePath("/painel/fornecedores");
   revalidatePath("/painel/produtos");
   return { erro: "", ok: `${nome} cadastrado.` };
+}
+
+// E-mail de requisicao do fornecedor: e para onde a tela Requisicoes manda o
+// pedido de ICCIDs, e e por ele que o robo reconhece de quem veio o CSV.
+// Editavel a qualquer momento — multi-fornecedor sem SSH.
+export async function salvarEmailFornecedor(_a: EstadoForn, form: FormData): Promise<EstadoForn> {
+  const u = await usuarioDaSessao();
+  if (!u) return { erro: "Sessao expirada. Entre de novo.", ok: "" };
+  if (!PODE.includes(u.papel)) return { erro: "Seu papel nao permite isso.", ok: "" };
+
+  const id = String(form.get("id") ?? "");
+  const email = String(form.get("email") ?? "").trim().toLowerCase();
+  if (!id) return { erro: "Fornecedor nao informado.", ok: "" };
+  if (email && !email.includes("@")) return { erro: "E-mail invalido.", ok: "" };
+
+  const r = await db.query(
+    `update fornecedor
+        set contato = case when $2 = '' then contato - 'email'
+                           else coalesce(contato, '{}'::jsonb) || jsonb_build_object('email', $2::text) end
+      where id = $1
+      returning nome, contato->>'email' as email`,
+    [id, email],
+  );
+  if (r.rowCount === 0) return { erro: "Fornecedor nao encontrado.", ok: "" };
+
+  await auditar("fornecedor.email", {
+    usuarioId: u.id, entidade: "fornecedor", entidadeId: id,
+    depois: { email: email || "(removido)" },
+  });
+  revalidatePath("/painel/fornecedores");
+  revalidatePath("/painel/requisicoes");
+  return { erro: "", ok: email ? `${r.rows[0].nome}: requisicoes vao para ${email}.` : `${r.rows[0].nome}: e-mail removido.` };
 }
 
 export async function alternarFornecedor(_a: EstadoForn, form: FormData): Promise<EstadoForn> {
