@@ -173,7 +173,8 @@ export default function CartaoRequisicoes({
         <h2 style={{ fontSize: "0.95rem", textTransform: "uppercase", margin: "0 0 6px" }}>Conexão do WhatsApp (número-robô)</h2>
         <p className="nota" style={{ marginTop: 0 }}>
           Ativação toda por aqui — criar a instância, escanear o QR e trocar de número no futuro, sem SSH.
-          Usa a instância da Configuração acima ({zapInstancia ? <b>{zapInstancia}</b> : <b>defina e guarde primeiro</b>}) e a API key do cofre.
+          Instância: <b>{zapInstancia || "americasim (padrão)"}</b>. A API key o painel acha sozinho
+          (cofre primeiro; sem cofre, lê a do próprio servidor) — os campos da Configuração são só ajuste fino.
         </p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {podeOperar ? (

@@ -3,6 +3,7 @@
 // ATENCAO: so exporta FUNCOES ASSINCRONAS. Estados iniciais moram em ./tipos.
 
 import { revalidatePath } from "next/cache";
+import { readFile } from "fs/promises";
 import QRCode from "qrcode";
 import { db } from "../../../lib/db";
 import { enviarEmailGmail } from "../../../lib/email";
@@ -38,6 +39,19 @@ async function gravarParametro(chave: string, valor: string, descricao: string, 
   );
 }
 
+// API key da Evolution: o cofre manda; sem cofre, o hub lê sozinho o arquivo
+// /home/ubuntu/.evolution_api_key desta MESMA máquina (600, dono ubuntu) —
+// zero passo manual, zero segredo em chat. O campo da tela vira override.
+async function apikeyEvolution(): Promise<string> {
+  const doCofre = await lerSegredoApp("ZAP_APIKEY");
+  if (doCofre) return doCofre;
+  try {
+    return (await readFile("/home/ubuntu/.evolution_api_key", "utf8")).trim();
+  } catch {
+    return "";
+  }
+}
+
 // Push no Zap — Evolution API (roda NESTE servidor, porta interna 8080).
 // Config: zap.instancia + zap.destino em parametro; ZAP_APIKEY no cofre;
 // zap.url so muda se a Evolution sair desta maquina. zap.webhook generico
@@ -45,9 +59,9 @@ async function gravarParametro(chave: string, valor: string, descricao: string, 
 // Falha NUNCA derruba o fluxo principal — aviso e cortesia, estoque e a verdade.
 async function avisarZap(texto: string): Promise<{ ok: boolean; detalhe: string }> {
   try {
-    const instancia = await lerParametro("zap.instancia");
+    const instancia = await lerParametro("zap.instancia", "americasim");
     const destino = (await lerParametro("zap.destino")).replace(/\D/g, "");
-    const apikey = await lerSegredoApp("ZAP_APIKEY");
+    const apikey = await apikeyEvolution();
     if (instancia && destino && apikey) {
       const base = (await lerParametro("zap.url", "http://127.0.0.1:8080")).replace(/\/+$/, "");
       const r = await fetch(`${base}/message/sendText/${encodeURIComponent(instancia)}`, {
@@ -118,8 +132,8 @@ export async function testarZapAcao(_a: EstadoReq): Promise<EstadoReq> {
 // Evolution local usando a API key do cofre (campo da Configuração).
 
 async function evolution(caminho: string, metodo: "GET" | "POST" | "DELETE", corpo?: unknown): Promise<{ ok: boolean; status: number; dados: any; erro: string }> {
-  const apikey = await lerSegredoApp("ZAP_APIKEY");
-  if (!apikey) return { ok: false, status: 0, dados: null, erro: "API key da Evolution não está no cofre — preencha o campo na Configuração e guarde." };
+  const apikey = await apikeyEvolution();
+  if (!apikey) return { ok: false, status: 0, dados: null, erro: "API key da Evolution não encontrada (nem no cofre, nem no arquivo dela no servidor)." };
   const base = (await lerParametro("zap.url", "http://127.0.0.1:8080")).replace(/\/+$/, "");
   try {
     const r = await fetch(base + caminho, {
@@ -179,8 +193,7 @@ async function estadoDaInstancia(instancia: string): Promise<{ estado: string; n
 export async function zapStatusAcao(_a: EstadoZap): Promise<EstadoZap> {
   const u = await autorizar(OPERACAO);
   if ("erro" in u) return { erro: u.erro, ok: "", estado: "", numero: "", qr: "" };
-  const instancia = await lerParametro("zap.instancia");
-  if (!instancia) return { erro: "Defina o nome da instância na Configuração (ex.: americasim) e guarde.", ok: "", estado: "", numero: "", qr: "" };
+  const instancia = await lerParametro("zap.instancia", "americasim");
   const s = await estadoDaInstancia(instancia);
   if (s.erro) return { erro: s.erro, ok: "", estado: "", numero: "", qr: "" };
   const texto =
@@ -194,8 +207,7 @@ export async function zapStatusAcao(_a: EstadoZap): Promise<EstadoZap> {
 export async function zapConectarAcao(_a: EstadoZap): Promise<EstadoZap> {
   const u = await autorizar(ADMIN);
   if ("erro" in u) return { erro: u.erro, ok: "", estado: "", numero: "", qr: "" };
-  const instancia = await lerParametro("zap.instancia");
-  if (!instancia) return { erro: "Defina o nome da instância na Configuração (ex.: americasim) e guarde antes de conectar.", ok: "", estado: "", numero: "", qr: "" };
+  const instancia = await lerParametro("zap.instancia", "americasim");
 
   // Já conectado? Não derrubar sessão viva gerando QR à toa.
   const s0 = await estadoDaInstancia(instancia);
@@ -223,8 +235,7 @@ export async function zapConectarAcao(_a: EstadoZap): Promise<EstadoZap> {
 export async function zapDesconectarAcao(_a: EstadoZap): Promise<EstadoZap> {
   const u = await autorizar(ADMIN);
   if ("erro" in u) return { erro: u.erro, ok: "", estado: "", numero: "", qr: "" };
-  const instancia = await lerParametro("zap.instancia");
-  if (!instancia) return { erro: "Sem instância configurada.", ok: "", estado: "", numero: "", qr: "" };
+  const instancia = await lerParametro("zap.instancia", "americasim");
   const r = await evolution(`/instance/logout/${encodeURIComponent(instancia)}`, "DELETE");
   if (!r.ok && r.status !== 404) return { erro: r.erro, ok: "", estado: "", numero: "", qr: "" };
   await auditar("requisicoes.zap.desconectar", { usuarioId: u.id, entidade: "parametro", depois: { instancia } });
