@@ -29,6 +29,9 @@ import { usePathname } from "next/navigation";
 // Configuracoes (02/09/2026): area unica de configuracao em ABAS — Google &
 // E-mail (mudou de /painel/google, que redireciona) e Zap (mudou de
 // Requisicoes). Integracao nova de sistema = aba nova la dentro.
+//
+// Registros (02/09/2026): auditoria — linha do tempo so-leitura de tudo que o
+// sistema fez (acoes, e-mails, Zaps, operadora).
 const AREAS = [
   {
     grupo: "Operação",
@@ -66,6 +69,7 @@ const AREAS = [
     grupo: "Sistema",
     itens: [
       { href: "/painel/config", rotulo: "Configurações", pronto: true, exato: false },
+      { href: "/painel/registros", rotulo: "Registros", pronto: true, exato: false },
       { href: "/painel/marketing", rotulo: "Marketing", pronto: false, exato: false },
     ],
   },
