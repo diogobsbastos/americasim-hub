@@ -16,7 +16,7 @@ export default async function Fornecedores() {
 
   const [f, s] = await Promise.all([
     db.query(
-      `select f.id, f.nome, f.ativo,
+      `select f.id, f.nome, f.ativo, coalesce(f.contato->>'email', '') as email,
               (select count(*) from variante v where v.fornecedor_id = f.id)::int as skus
          from fornecedor f
         order by f.ativo desc, f.nome`,
@@ -34,6 +34,7 @@ export default async function Fornecedores() {
   const fornecedores: LinhaFornecedor[] = f.rows.map((x: any) => ({
     id: x.id,
     nome: x.nome,
+    email: x.email,
     ativo: x.ativo,
     skus: x.skus,
   }));

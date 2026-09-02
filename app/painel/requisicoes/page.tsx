@@ -2,7 +2,7 @@ import { db } from "../../../lib/db";
 import { estadoCaixa } from "../../../lib/caixa-imap";
 import { usuarioDaSessao } from "../../../lib/painel/sessao";
 import { quando } from "../../../lib/quando";
-import CartaoRequisicoes, { type LoteTela, type RequisicaoTela, type VarianteOpcao } from "./CartaoRequisicoes";
+import CartaoRequisicoes, { type FornecedorOpcao, type LoteTela, type RequisicaoTela, type VarianteOpcao } from "./CartaoRequisicoes";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +65,13 @@ export default async function Requisicoes() {
   );
   const variantes: VarianteOpcao[] = vars.rows.map((v: any) => ({ id: v.id, sku: v.sku, modo: v.modo }));
 
+  // Fornecedores para o seletor da requisicao (multi-fornecedor, 02/09).
+  const forn = await db.query(
+    `select id, nome, coalesce(contato->>'email', '') as email from fornecedor where ativo order by nome`,
+  );
+  const fornecedores: FornecedorOpcao[] = forn.rows.map((f: any) => ({ id: f.id, nome: f.nome, email: f.email }));
+  const fornecedorPadrao = fornecedores.find((f) => f.nome.toLowerCase() === "easysim4u")?.id ?? "";
+
   const caixa = estadoCaixa();
 
   return (
@@ -85,6 +92,8 @@ export default async function Requisicoes() {
         lotes={lotes}
         requisicoes={requisicoes}
         variantes={variantes}
+        fornecedores={fornecedores}
+        fornecedorPadrao={fornecedorPadrao}
         podeAdmin={!!podeAdmin}
         podeOperar={!!podeOperar}
       />

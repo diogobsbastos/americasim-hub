@@ -31,6 +31,12 @@ export interface VarianteOpcao {
   modo: string;
 }
 
+export interface FornecedorOpcao {
+  id: string;
+  nome: string;
+  email: string;
+}
+
 function Resultado({ e }: { e: { erro: string; ok: string } }) {
   return (
     <>
@@ -44,11 +50,12 @@ const rotulo = { display: "block", fontSize: "0.78rem", color: "var(--texto-frac
 const campo = { width: "100%", maxWidth: 520 } as const;
 
 export default function CartaoRequisicoes({
-  destino, remetentes, caixaLigada, caixaErro, lotes, requisicoes, variantes, podeAdmin, podeOperar,
+  destino, remetentes, caixaLigada, caixaErro, lotes, requisicoes, variantes, fornecedores, fornecedorPadrao, podeAdmin, podeOperar,
 }: {
   destino: string; remetentes: string;
   caixaLigada: boolean; caixaErro: string;
   lotes: LoteTela[]; requisicoes: RequisicaoTela[]; variantes: VarianteOpcao[];
+  fornecedores: FornecedorOpcao[]; fornecedorPadrao: string;
   podeAdmin: boolean; podeOperar: boolean;
 }) {
   const [eReq, aReq, pReq] = useActionState(enviarRequisicaoAcao, ESTADO_REQ_INICIAL);
@@ -69,6 +76,13 @@ export default function CartaoRequisicoes({
         </p>
         {podeOperar ? (
           <form action={aReq}>
+            <label style={rotulo} htmlFor="rf">Fornecedor (o e-mail vem do cadastro em Fornecedores)</label>
+            <select id="rf" name="fornecedor_id" defaultValue={fornecedorPadrao} style={{ maxWidth: 420 }} disabled={pReq}>
+              <option value="">— padrão ({destino})</option>
+              {fornecedores.map((f) => (
+                <option key={f.id} value={f.id}>{f.nome}{f.email ? ` — ${f.email}` : " (sem e-mail: usa o padrão)"}</option>
+              ))}
+            </select>
             <label style={rotulo} htmlFor="rq">Quantidade de ICCIDs</label>
             <input id="rq" name="quantidade" type="number" min={1} max={10000} required style={{ width: 140 }} disabled={pReq} />
             <label style={rotulo} htmlFor="ro">Observação (opcional — vai no e-mail e no Zap)</label>

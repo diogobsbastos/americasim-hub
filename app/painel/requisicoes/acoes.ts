@@ -71,7 +71,17 @@ export async function enviarRequisicaoAcao(_a: EstadoReq, form: FormData): Promi
     return { erro: "Quantidade inválida (1 a 10000).", ok: "" };
   }
 
-  const destino = await lerParametro("requisicao.destino", "admin@easysim4u.com");
+  // Fornecedor escolhido na tela: o e-mail do cadastro manda; sem escolha (ou
+  // sem e-mail no cadastro), vale o destino padrão da Configuração.
+  const fornecedorId = String(form.get("fornecedor_id") ?? "").trim();
+  let destino = await lerParametro("requisicao.destino", "admin@easysim4u.com");
+  let fornecedorNome = "";
+  if (fornecedorId) {
+    const fr = await db.query("select nome, contato->>'email' as email from fornecedor where id = $1 and ativo", [fornecedorId]);
+    if (fr.rows.length === 0) return { erro: "Fornecedor não encontrado (ou inativo).", ok: "" };
+    fornecedorNome = String(fr.rows[0].nome);
+    if (fr.rows[0].email) destino = String(fr.rows[0].email).trim().toLowerCase();
+  }
   const assunto = `Requisição de ICCIDs — AmericaSim (${quantidade} unidades)`;
   const html =
     `<div style="font-family:Arial,sans-serif;max-width:560px">` +
@@ -88,11 +98,11 @@ export async function enviarRequisicaoAcao(_a: EstadoReq, form: FormData): Promi
   if (!r.ok) return { erro: `E-mail não saiu: ${r.detalhe}`, ok: "" };
 
   await db.query(
-    `insert into requisicao_iccid (para, assunto, corpo, quantidade, criado_por) values ($1,$2,$3,$4,$5)`,
-    [destino, assunto, observacao, quantidade, u.id],
+    `insert into requisicao_iccid (para, assunto, corpo, quantidade, criado_por, fornecedor_id) values ($1,$2,$3,$4,$5,$6)`,
+    [destino, assunto, observacao, quantidade, u.id, fornecedorId || null],
   );
   await auditar("requisicoes.enviar", { usuarioId: u.id, entidade: "requisicao_iccid", depois: { destino, quantidade } });
-  const z = await avisarZap(`📤 AmericaSim: requisição de ${quantidade} ICCID(s) enviada para ${destino}.${observacao ? ` Obs: ${observacao}` : ""}`);
+  const z = await avisarZap(`📤 AmericaSim: requisição de ${quantidade} ICCID(s) enviada para ${fornecedorNome ? `${fornecedorNome} (${destino})` : destino}.${observacao ? ` Obs: ${observacao}` : ""}`);
   revalidatePath(CAMINHO);
   return { erro: "", ok: `Requisição de ${quantidade} ICCIDs enviada para ${destino}. Zap: ${z.ok ? "avisado" : z.detalhe}` };
 }
@@ -127,6 +137,21 @@ export async function aprovarLoteAcao(_a: EstadoReq, form: FormData): Promise<Es
       throw new Error(`CSV sem código LPA só pode virar POOL, e pool exige SKU em modo operadora_fixo (${v.rows[0].sku} está em ${v.rows[0].modo}).`);
     }
 
+    // De quem veio: casa o remetente com o e-mail do cadastro de fornecedores
+    // (exato ou pelo dominio). Sem casamento, o lote fica sem fornecedor —
+    // visivel na tela Estoque como "—" para ser arrumado no cadastro.
+    const remetente = String(lote.remetente ?? "").toLowerCase();
+    const dominio = remetente.split("@")[1] ?? "";
+    const fr = await db.query(
+      `select id from fornecedor
+        where ativo and coalesce(contato->>'email','') <> ''
+          and (lower(contato->>'email') = $1
+               or split_part(lower(contato->>'email'), '@', 2) = $2)
+        order by (lower(contato->>'email') = $1) desc limit 1`,
+      [remetente, dominio],
+    );
+    const fornecedorId: string | null = fr.rows[0]?.id ?? null;
+
     const nomeLote = `easysim-${new Date().toISOString().slice(0, 10)}`;
     let inseridos = 0, comCodigo = 0, repetidos = 0;
     for (const linha of iccids) {
@@ -134,20 +159,20 @@ export async function aprovarLoteAcao(_a: EstadoReq, form: FormData): Promise<Es
       let r;
       if (linha.lpa) {
         r = await db.query(
-          `insert into estoque_esim (variante_id, codigo_lpa, codigo_hash, iccid, operadora, status, cifrado, lote, custo_moeda, dados_chip)
-           select $1, $2, $3, $4, 'easysim4u', 'disponivel', true, $5, 'USD', $6::jsonb
+          `insert into estoque_esim (variante_id, codigo_lpa, codigo_hash, iccid, operadora, status, cifrado, lote, custo_moeda, dados_chip, fornecedor_id)
+           select $1, $2, $3, $4, 'easysim4u', 'disponivel', true, $5, 'USD', $6::jsonb, $7
             where not exists (select 1 from estoque_esim where iccid = $4)
            returning id`,
-          [varianteId, cifrarCodigo(linha.lpa), impressaoCodigo(linha.lpa), linha.iccid, nomeLote, extras],
+          [varianteId, cifrarCodigo(linha.lpa), impressaoCodigo(linha.lpa), linha.iccid, nomeLote, extras, fornecedorId],
         );
         if (r.rows.length > 0) comCodigo += 1;
       } else {
         r = await db.query(
-          `insert into estoque_esim (variante_id, codigo_lpa, iccid, operadora, status, cifrado, lote, custo_moeda, dados_chip)
-           select $1, ''::bytea, $2, 'cmlink', 'disponivel', false, $3, 'USD', $4::jsonb
+          `insert into estoque_esim (variante_id, codigo_lpa, iccid, operadora, status, cifrado, lote, custo_moeda, dados_chip, fornecedor_id)
+           select $1, ''::bytea, $2, 'cmlink', 'disponivel', false, $3, 'USD', $4::jsonb, $5
             where not exists (select 1 from estoque_esim where iccid = $2)
            returning id`,
-          [varianteId, linha.iccid, nomeLote, extras],
+          [varianteId, linha.iccid, nomeLote, extras, fornecedorId],
         );
       }
       if (r.rows.length > 0) inseridos += 1; else repetidos += 1;
@@ -174,9 +199,9 @@ export async function aprovarLoteAcao(_a: EstadoReq, form: FormData): Promise<Es
     await db.query(
       `update email_lote
           set status = 'aprovado', variante_id = $2, aprovado_por = $3, aprovado_em = now(),
-              resultado = $4::jsonb
+              resultado = $4::jsonb, fornecedor_id = $5
         where id = $1`,
-      [loteId, varianteId, u.id, JSON.stringify({ inseridos, com_codigo: comCodigo, repetidos, email_confirmacao: emailConfirmacao })],
+      [loteId, varianteId, u.id, JSON.stringify({ inseridos, com_codigo: comCodigo, repetidos, email_confirmacao: emailConfirmacao }), fornecedorId],
     );
     await auditar("requisicoes.aprovar", { usuarioId: u.id, entidade: "email_lote", depois: { loteId, varianteId, inseridos, repetidos } });
     const z = await avisarZap(`📥 AmericaSim: lote de ICCIDs aprovado — ${inseridos} carregado(s) no estoque (${repetidos} repetidos). Confirmação por e-mail: ${emailConfirmacao}.`);

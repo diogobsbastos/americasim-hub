@@ -14,6 +14,7 @@ export const ESTADO_FORN_INICIAL: EstadoForn = { erro: "", ok: "" };
 export interface LinhaFornecedor {
   id: string;
   nome: string;
+  email: string; // e-mail de requisicao de ICCIDs (contato->>'email')
   ativo: boolean;
   skus: number;
 }
