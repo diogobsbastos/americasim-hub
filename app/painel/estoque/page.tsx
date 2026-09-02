@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "../../../lib/db";
 import { usuarioDaSessao } from "../../../lib/painel/sessao";
 import ListaCodigos, { type LinhaEstoque } from "./ListaCodigos";
+import CartaoAlocar, { type PoolFornecedor, type SkuAlocavel } from "./CartaoAlocar";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function EstoqueGeral({
        and ($4 = '' or e.lote ilike '%' || $4 || '%')`;
   const args = [fProd, fSku, fStatus, fLote];
 
-  const [produtos, variantes, resumo, porFornecedor, atencao, codigos, quantos, historico] = await Promise.all([
+  const [produtos, variantes, resumo, porFornecedor, pools, atencao, codigos, quantos, historico] = await Promise.all([
     db.query("select handle, nome from produto order by nome"),
     db.query(
       `select distinct v.sku from variante v join produto p on p.id = v.produto_id
@@ -70,12 +71,24 @@ export default async function EstoqueGeral({
               count(*) filter (where e.status = 'reservado')::int  as reservado,
               count(*) filter (where e.status = 'entregue')::int   as entregue,
               count(*) filter (where e.status not in ('disponivel','reservado','entregue'))::int as fora,
+              count(*) filter (where e.variante_id is null)::int as sem_produto,
               max(e.criado_em) as ultimo
          from estoque_esim e
          left join fornecedor f on f.id = e.fornecedor_id
         group by 1, 2
         order by max(e.criado_em) desc
         limit 40`,
+    ),
+    // Pools do fornecedor (codigos sem produto) + SKUs para a alocacao.
+    db.query(
+      `select coalesce(e.fornecedor_id::text, '') as fornecedor_id,
+              coalesce(f.nome, nullif(e.operadora, ''), 'sem fornecedor') as nome,
+              count(*)::int as sem_produto
+         from estoque_esim e
+         left join fornecedor f on f.id = e.fornecedor_id
+        where e.variante_id is null and e.status = 'disponivel'
+        group by 1, 2
+        order by 2`,
     ),
     // Variantes marcadas como visiveis que estao sem codigo livre.
     // Desde a migracao 007 elas SOMEM da vitrine sozinhas — entao isto virou
@@ -94,12 +107,13 @@ export default async function EstoqueGeral({
         order by p.nome, v.sku, c.codigo`,
     ),
     db.query(
-      `select e.id, p.nome as produto, p.handle, v.sku, e.iccid, e.status::text as status,
+      `select e.id, coalesce(p.nome, '— fornecedor') as produto, coalesce(p.handle, '') as handle,
+              coalesce(v.sku, '—') as sku, e.iccid, e.status::text as status,
               e.lote, e.operadora, e.validade::text as validade,
               e.custo_brl::text as custo_brl, e.criado_em::text as criado_em
          from estoque_esim e
-         join variante v on v.id = e.variante_id
-         join produto p on p.id = v.produto_id
+         left join variante v on v.id = e.variante_id
+         left join produto p on p.id = v.produto_id
         where ${where}
         order by (e.status = 'disponivel') desc, e.criado_em desc
         limit ${TETO}`,
@@ -108,8 +122,8 @@ export default async function EstoqueGeral({
     db.query(
       `select count(*)::int as n
          from estoque_esim e
-         join variante v on v.id = e.variante_id
-         join produto p on p.id = v.produto_id
+         left join variante v on v.id = e.variante_id
+         left join produto p on p.id = v.produto_id
         where ${where}`,
       args,
     ),
@@ -128,6 +142,11 @@ export default async function EstoqueGeral({
 
   const total = quantos.rows[0]?.n ?? 0;
   const linhas: LinhaEstoque[] = codigos.rows as any;
+
+  const vAloc = await db.query(
+    `select v.id, v.sku from variante v where v.ativo order by v.sku limit 200`,
+  );
+  const variantesAlocaveis: SkuAlocavel[] = vAloc.rows.map((x: any) => ({ id: x.id, sku: x.sku }));
 
   // Duas leituras muito diferentes da mesma consulta: o que saiu da loja
   // sozinho (aviso de reposicao) e o que continua a venda sem ter o que
@@ -250,6 +269,12 @@ export default async function EstoqueGeral({
         </table>
       </div>
 
+      <CartaoAlocar
+        pools={pools.rows as PoolFornecedor[]}
+        skus={variantesAlocaveis}
+        podeMexer={!!podeMover}
+      />
+
       {/* ------------------------------------------- por fornecedor e lote */}
       <h2 style={{ fontSize: "1.1rem", margin: "0 0 4px" }}>Por fornecedor e lote</h2>
       <p style={{ color: "var(--texto-fraco)", margin: "0 0 12px", fontSize: "0.88rem" }}>
@@ -263,6 +288,7 @@ export default async function EstoqueGeral({
               <th style={{ padding: "11px 14px", fontWeight: 600 }}>FORNECEDOR</th>
               <th style={{ padding: "11px 14px", fontWeight: 600 }}>LOTE</th>
               <th style={{ padding: "11px 14px", fontWeight: 600, textAlign: "right" }}>RECEBIDOS</th>
+              <th style={{ padding: "11px 14px", fontWeight: 600, textAlign: "right" }}>A ALOCAR</th>
               <th style={{ padding: "11px 14px", fontWeight: 600, textAlign: "right" }}>DISPONÍVEL</th>
               <th style={{ padding: "11px 14px", fontWeight: 600, textAlign: "right" }}>RESERVADO</th>
               <th style={{ padding: "11px 14px", fontWeight: 600, textAlign: "right" }}>ENTREGUE</th>
@@ -272,7 +298,7 @@ export default async function EstoqueGeral({
           </thead>
           <tbody>
             {porFornecedor.rows.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: "11px 14px", color: "var(--texto-fraco)" }}>Nenhum ICCID em estoque ainda.</td></tr>
+              <tr><td colSpan={9} style={{ padding: "11px 14px", color: "var(--texto-fraco)" }}>Nenhum ICCID em estoque ainda.</td></tr>
             ) : porFornecedor.rows.map((r: any, i: number) => (
               <tr key={i} style={{ borderTop: "1px solid var(--borda)" }}>
                 <td style={{ padding: "11px 14px" }}>{r.fornecedor}</td>
@@ -282,6 +308,9 @@ export default async function EstoqueGeral({
                   </Link>
                 </td>
                 <td style={{ padding: "11px 14px", textAlign: "right", fontWeight: 700 }}>{r.total}</td>
+                <td style={{ padding: "11px 14px", textAlign: "right" }}>
+                  <span style={{ color: r.sem_produto > 0 ? "var(--alerta)" : "var(--texto-fraco)", fontWeight: 700 }}>{r.sem_produto}</span>
+                </td>
                 <td style={{ padding: "11px 14px", textAlign: "right" }}>
                   <span style={{ color: r.disponivel > 0 ? "var(--ok)" : "var(--texto-fraco)", fontWeight: 700 }}>{r.disponivel}</span>
                 </td>

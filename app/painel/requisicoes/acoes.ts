@@ -188,8 +188,12 @@ export async function aprovarLoteAcao(_a: EstadoReq, form: FormData): Promise<Es
   if ("erro" in u) return { erro: u.erro, ok: "" };
 
   const loteId = String(form.get("lote_id") ?? "").trim();
+  // SKU e OPCIONAL desde 02/09: sem SKU, o lote entra como ESTOQUE DO
+  // FORNECEDOR (variante_id nulo) — guardado e cifrado, mas fora de venda ate
+  // a alocacao pela tela Estoque. "Chega do fornecedor primeiro; vira produto
+  // quando voce decidir."
   const varianteId = String(form.get("variante_id") ?? "").trim();
-  if (!loteId || !varianteId) return { erro: "Escolha o SKU de destino.", ok: "" };
+  if (!loteId) return { erro: "Lote não informado.", ok: "" };
 
   // Reivindicacao atomica: dois cliques simultaneos nao aprovam duas vezes.
   const l = await db.query(
@@ -201,15 +205,18 @@ export async function aprovarLoteAcao(_a: EstadoReq, form: FormData): Promise<Es
   const lote = l.rows[0];
 
   try {
-    const v = await db.query("select sku, modo_entrega::text as modo from variante where id = $1", [varianteId]);
-    if (v.rows.length === 0) throw new Error("SKU não encontrado.");
+    if (varianteId) {
+      const v = await db.query("select sku, modo_entrega::text as modo from variante where id = $1", [varianteId]);
+      if (v.rows.length === 0) throw new Error("SKU não encontrado.");
+      const previa = parsearCsv(String(lote.csv_texto));
+      const temLpa = previa.iccids.some((x) => x.lpa);
+      if (!temLpa && v.rows[0].modo !== "operadora_fixo") {
+        throw new Error(`CSV sem código LPA só pode virar POOL, e pool exige SKU em modo operadora_fixo (${v.rows[0].sku} está em ${v.rows[0].modo}).`);
+      }
+    }
 
     const { iccids } = parsearCsv(String(lote.csv_texto));
     if (iccids.length === 0) throw new Error("O parser não achou nenhum ICCID neste arquivo.");
-    const comLpa = iccids.filter((x) => x.lpa);
-    if (comLpa.length === 0 && v.rows[0].modo !== "operadora_fixo") {
-      throw new Error(`CSV sem código LPA só pode virar POOL, e pool exige SKU em modo operadora_fixo (${v.rows[0].sku} está em ${v.rows[0].modo}).`);
-    }
 
     // De quem veio: casa o remetente com o e-mail do cadastro de fornecedores
     // (exato ou pelo dominio). Sem casamento, o lote fica sem fornecedor —
@@ -237,7 +244,7 @@ export async function aprovarLoteAcao(_a: EstadoReq, form: FormData): Promise<Es
            select $1, $2, $3, $4, 'easysim4u', 'disponivel', true, $5, 'USD', $6::jsonb, $7
             where not exists (select 1 from estoque_esim where iccid = $4)
            returning id`,
-          [varianteId, cifrarCodigo(linha.lpa), impressaoCodigo(linha.lpa), linha.iccid, nomeLote, extras, fornecedorId],
+          [varianteId || null, cifrarCodigo(linha.lpa), impressaoCodigo(linha.lpa), linha.iccid, nomeLote, extras, fornecedorId],
         );
         if (r.rows.length > 0) comCodigo += 1;
       } else {
@@ -246,7 +253,7 @@ export async function aprovarLoteAcao(_a: EstadoReq, form: FormData): Promise<Es
            select $1, ''::bytea, $2, 'cmlink', 'disponivel', false, $3, 'USD', $4::jsonb, $5
             where not exists (select 1 from estoque_esim where iccid = $2)
            returning id`,
-          [varianteId, linha.iccid, nomeLote, extras, fornecedorId],
+          [varianteId || null, linha.iccid, nomeLote, extras, fornecedorId],
         );
       }
       if (r.rows.length > 0) inseridos += 1; else repetidos += 1;
@@ -275,12 +282,13 @@ export async function aprovarLoteAcao(_a: EstadoReq, form: FormData): Promise<Es
           set status = 'aprovado', variante_id = $2, aprovado_por = $3, aprovado_em = now(),
               resultado = $4::jsonb, fornecedor_id = $5
         where id = $1`,
-      [loteId, varianteId, u.id, JSON.stringify({ inseridos, com_codigo: comCodigo, repetidos, email_confirmacao: emailConfirmacao }), fornecedorId],
+      [loteId, varianteId || null, u.id, JSON.stringify({ inseridos, com_codigo: comCodigo, repetidos, email_confirmacao: emailConfirmacao }), fornecedorId],
     );
     await auditar("requisicoes.aprovar", { usuarioId: u.id, entidade: "email_lote", depois: { loteId, varianteId, inseridos, repetidos } });
     const z = await avisarZap(`📥 AmericaSim: lote de ICCIDs aprovado — ${inseridos} carregado(s) no estoque (${repetidos} repetidos). Confirmação por e-mail: ${emailConfirmacao}.`);
     revalidatePath(CAMINHO);
-    return { erro: "", ok: `Lote aprovado: ${inseridos} no estoque (${comCodigo} com QR pronto, ${repetidos} repetidos). E-mail: ${emailConfirmacao}. Zap: ${z.ok ? "avisado" : z.detalhe}` };
+    const destinoTxt = varianteId ? "no estoque" : "como ESTOQUE DO FORNECEDOR — aloque a um produto na tela Estoque";
+    return { erro: "", ok: `Lote aprovado: ${inseridos} ${destinoTxt} (${comCodigo} com QR pronto, ${repetidos} repetidos). E-mail: ${emailConfirmacao}. Zap: ${z.ok ? "avisado" : z.detalhe}` };
   } catch (e: any) {
     await db.query(`update email_lote set status = 'pendente' where id = $1 and status = 'aprovando'`, [loteId]);
     return { erro: String(e?.message ?? e), ok: "" };
