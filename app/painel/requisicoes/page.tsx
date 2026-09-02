@@ -1,6 +1,5 @@
 import { db } from "../../../lib/db";
 import { estadoCaixa } from "../../../lib/caixa-imap";
-import { ondeEstaOSegredo } from "../../../lib/segredo-app";
 import { usuarioDaSessao } from "../../../lib/painel/sessao";
 import { quando } from "../../../lib/quando";
 import CartaoRequisicoes, { type LoteTela, type RequisicaoTela, type VarianteOpcao } from "./CartaoRequisicoes";
@@ -12,22 +11,18 @@ export const metadata = { title: "Requisições — AmericaSim", robots: { index
 // O fluxo de ICCIDs com a EasySim4u (reuniao de 01/09): requisitar por e-mail
 // (+aviso no Zap), receber o CSV (o Gmail avisa o robo — IMAP IDLE), aprovar na
 // tela, estoque carregado, confirmacao automatica por e-mail + Zap.
+// O Zap em si (conexao/config) vive em Configuracoes → Zap desde 02/09.
 export default async function Requisicoes() {
   const u = await usuarioDaSessao();
   const podeAdmin = u?.papel === "admin";
   const podeOperar = u?.papel === "admin" || u?.papel === "operacao";
 
-  const [pDestino, pRemetentes, pZapInst, pZapDest, ondeZapKey] = await Promise.all([
+  const [pDestino, pRemetentes] = await Promise.all([
     db.query("select valor from parametro where chave = 'requisicao.destino'"),
     db.query("select valor from parametro where chave = 'caixa.remetentes'"),
-    db.query("select valor from parametro where chave = 'zap.instancia'"),
-    db.query("select valor from parametro where chave = 'zap.destino'"),
-    ondeEstaOSegredo("ZAP_APIKEY"),
   ]);
   const destino = String(pDestino.rows[0]?.valor ?? "").trim() || "admin@easysim4u.com";
   const remetentes = String(pRemetentes.rows[0]?.valor ?? "").trim() || "admin@easysim4u.com";
-  const zapInstancia = String(pZapInst.rows[0]?.valor ?? "").trim();
-  const zapDestino = String(pZapDest.rows[0]?.valor ?? "").trim();
 
   const lotesBrutos = await db.query(
     `select id, remetente, assunto, arquivo_nome, recebido_em, linhas, iccids, previa, status, resultado
@@ -85,9 +80,6 @@ export default async function Requisicoes() {
       <CartaoRequisicoes
         destino={destino}
         remetentes={remetentes}
-        zapInstancia={zapInstancia}
-        zapDestino={zapDestino}
-        zapApikeyOnde={ondeZapKey}
         caixaLigada={caixa.ligada}
         caixaErro={caixa.ultimoErro ?? ""}
         lotes={lotes}

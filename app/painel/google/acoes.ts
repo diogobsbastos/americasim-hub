@@ -11,7 +11,8 @@ import {
 import { auditar, usuarioDaSessao } from "../../../lib/painel/sessao";
 import type { EstadoGoogle } from "./tipos";
 
-const CAMINHO = "/painel/google";
+// A tela vive em Configuracoes → Google & E-mail desde 02/09.
+const CAMINHO = "/painel/config/google";
 
 async function autorizar(): Promise<{ id: string } | { erro: string }> {
   const u = await usuarioDaSessao();

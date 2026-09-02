@@ -26,8 +26,9 @@ import { usePathname } from "next/navigation";
 // Requisicoes (01/09/2026): o ciclo de ICCIDs com a EasySim4u — requisitar por
 // e-mail, aprovar o CSV recebido, estoque carregado com confirmacao automatica.
 //
-// Google & E-mail (01/09/2026): credenciais do Google pela tela — login das
-// lojas (OAuth) e o Gmail do robo de requisicoes (senha de app), no cofre.
+// Configuracoes (02/09/2026): area unica de configuracao em ABAS — Google &
+// E-mail (mudou de /painel/google, que redireciona) e Zap (mudou de
+// Requisicoes). Integracao nova de sistema = aba nova la dentro.
 const AREAS = [
   {
     grupo: "Operação",
@@ -64,9 +65,8 @@ const AREAS = [
   {
     grupo: "Sistema",
     itens: [
-      { href: "/painel/google", rotulo: "Google & E-mail", pronto: true, exato: false },
+      { href: "/painel/config", rotulo: "Configurações", pronto: true, exato: false },
       { href: "/painel/marketing", rotulo: "Marketing", pronto: false, exato: false },
-      { href: "/painel/config", rotulo: "Configuração", pronto: false, exato: false },
     ],
   },
 ];

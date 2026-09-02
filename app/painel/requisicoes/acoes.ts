@@ -1,17 +1,16 @@
 "use server";
 
 // ATENCAO: so exporta FUNCOES ASSINCRONAS. Estados iniciais moram em ./tipos.
+// O Zap (conexao, config e envio) vive em lib/zap.ts + Configuracoes → Zap.
 
 import { revalidatePath } from "next/cache";
-import { readFile } from "fs/promises";
-import QRCode from "qrcode";
 import { db } from "../../../lib/db";
 import { enviarEmailGmail } from "../../../lib/email";
 import { parsearCsv } from "../../../lib/caixa-imap";
 import { cifrarCodigo, impressaoCodigo } from "../../../lib/cripto-esim";
-import { lerSegredoApp, salvarSegredoApp } from "../../../lib/segredo-app";
 import { auditar, usuarioDaSessao } from "../../../lib/painel/sessao";
-import type { EstadoReq, EstadoZap } from "./tipos";
+import { avisarZap } from "../../../lib/zap";
+import type { EstadoReq } from "./tipos";
 
 const CAMINHO = "/painel/requisicoes";
 const ADMIN = ["admin"];
@@ -39,59 +38,6 @@ async function gravarParametro(chave: string, valor: string, descricao: string, 
   );
 }
 
-// API key da Evolution: o cofre manda; sem cofre, o hub lê sozinho o arquivo
-// /home/ubuntu/.evolution_api_key desta MESMA máquina (600, dono ubuntu) —
-// zero passo manual, zero segredo em chat. O campo da tela vira override.
-async function apikeyEvolution(): Promise<string> {
-  const doCofre = await lerSegredoApp("ZAP_APIKEY");
-  if (doCofre) return doCofre;
-  try {
-    return (await readFile("/home/ubuntu/.evolution_api_key", "utf8")).trim();
-  } catch {
-    return "";
-  }
-}
-
-// Push no Zap — Evolution API (roda NESTE servidor, porta interna 8080).
-// Config: zap.instancia + zap.destino em parametro; ZAP_APIKEY no cofre;
-// zap.url so muda se a Evolution sair desta maquina. zap.webhook generico
-// continua valendo como alternativa (qualquer ponte que aceite POST {texto}).
-// Falha NUNCA derruba o fluxo principal — aviso e cortesia, estoque e a verdade.
-async function avisarZap(texto: string): Promise<{ ok: boolean; detalhe: string }> {
-  try {
-    const instancia = await lerParametro("zap.instancia", "americasim");
-    const destino = (await lerParametro("zap.destino")).replace(/\D/g, "");
-    const apikey = await apikeyEvolution();
-    if (instancia && destino && apikey) {
-      const base = (await lerParametro("zap.url", "http://127.0.0.1:8080")).replace(/\/+$/, "");
-      const r = await fetch(`${base}/message/sendText/${encodeURIComponent(instancia)}`, {
-        method: "POST",
-        headers: { "content-type": "application/json", apikey },
-        body: JSON.stringify({ number: destino, text: texto }),
-        signal: AbortSignal.timeout(15000),
-      });
-      const corpo = await r.text();
-      if (!r.ok) return { ok: false, detalhe: `Evolution respondeu ${r.status}: ${corpo.slice(0, 250)}` };
-      return { ok: true, detalhe: `enviado para ${destino} via instância ${instancia}` };
-    }
-    const webhook = await lerParametro("zap.webhook");
-    if (webhook) {
-      await fetch(webhook, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ texto }),
-        signal: AbortSignal.timeout(10000),
-      });
-      return { ok: true, detalhe: "enviado ao webhook genérico" };
-    }
-    return { ok: false, detalhe: "Zap não configurado (instância + destino + API key, ou webhook)." };
-  } catch (e) {
-    const msg = String(e).slice(0, 200);
-    console.error("zap:", msg);
-    return { ok: false, detalhe: msg };
-  }
-}
-
 // ---------------------------------------------------------------- config
 
 export async function salvarConfigReqAcao(_a: EstadoReq, form: FormData): Promise<EstadoReq> {
@@ -100,146 +46,17 @@ export async function salvarConfigReqAcao(_a: EstadoReq, form: FormData): Promis
 
   const destino = String(form.get("destino") ?? "").trim().toLowerCase();
   const remetentes = String(form.get("remetentes") ?? "").trim().toLowerCase();
-  const zapInstancia = String(form.get("zap_instancia") ?? "").trim();
-  const zapDestino = String(form.get("zap_destino") ?? "").replace(/\D/g, "");
-  const zapApikey = String(form.get("zap_apikey") ?? "").replace(/\s+/g, "");
   if (destino && !destino.includes("@")) return { erro: "Destino deve ser um e-mail.", ok: "" };
 
   if (destino) await gravarParametro("requisicao.destino", destino, "Para onde vai a requisicao de ICCIDs", u.id);
   if (remetentes) await gravarParametro("caixa.remetentes", remetentes, "Remetentes autorizados a mandar CSV (virgula; @dominio.com autoriza o dominio)", u.id);
-  await gravarParametro("zap.instancia", zapInstancia, "Instancia da Evolution API (vazio = Zap desligado)", u.id);
-  await gravarParametro("zap.destino", zapDestino, "Numero/grupo que recebe os avisos (so digitos, com DDI)", u.id);
-  if (zapApikey) await salvarSegredoApp("ZAP_APIKEY", zapApikey, u.id);
 
   await auditar("requisicoes.config", {
     usuarioId: u.id, entidade: "parametro",
-    depois: { destino, remetentes, zapInstancia, zapDestino, zapApikey: zapApikey ? "gravada" : "mantida" },
+    depois: { destino, remetentes },
   });
   revalidatePath(CAMINHO);
   return { erro: "", ok: "Configuração guardada." };
-}
-
-export async function testarZapAcao(_a: EstadoReq): Promise<EstadoReq> {
-  const u = await autorizar(OPERACAO);
-  if ("erro" in u) return { erro: u.erro, ok: "" };
-  const r = await avisarZap("🤖 Teste do robô AmericaSim — Zap conectado e funcionando.");
-  return r.ok ? { erro: "", ok: `Zap OK: ${r.detalhe}` } : { erro: `Zap falhou: ${r.detalhe}`, ok: "" };
-}
-
-// ---------------------------------------------------------------- conexao do zap
-// Área de ativação pela TELA: criar a instância, gerar o QR, ver o status e
-// trocar de número no futuro — sem SSH, sem manager, sem túnel. Fala com a
-// Evolution local usando a API key do cofre (campo da Configuração).
-
-async function evolution(caminho: string, metodo: "GET" | "POST" | "DELETE", corpo?: unknown): Promise<{ ok: boolean; status: number; dados: any; erro: string }> {
-  const apikey = await apikeyEvolution();
-  if (!apikey) return { ok: false, status: 0, dados: null, erro: "API key da Evolution não encontrada (nem no cofre, nem no arquivo dela no servidor)." };
-  const base = (await lerParametro("zap.url", "http://127.0.0.1:8080")).replace(/\/+$/, "");
-  try {
-    const r = await fetch(base + caminho, {
-      method: metodo,
-      headers: { "content-type": "application/json", apikey },
-      body: corpo === undefined ? undefined : JSON.stringify(corpo),
-      signal: AbortSignal.timeout(25000),
-      cache: "no-store",
-    });
-    const texto = await r.text();
-    let dados: any = texto;
-    try { dados = JSON.parse(texto); } catch { /* fica o texto mesmo */ }
-    return { ok: r.ok, status: r.status, dados, erro: r.ok ? "" : `Evolution respondeu ${r.status}: ${texto.slice(0, 250)}` };
-  } catch (e) {
-    return { ok: false, status: 0, dados: null, erro: `Evolution fora do ar? ${String(e).slice(0, 180)}` };
-  }
-}
-
-// A Evolution mudou de forma entre versões — aceitar as duas.
-function extrairQr(d: any): { base64: string; codigo: string } {
-  return {
-    base64: String(d?.base64 ?? d?.qrcode?.base64 ?? ""),
-    codigo: String(d?.code ?? d?.qrcode?.code ?? ""),
-  };
-}
-
-async function qrParaTela(d: any): Promise<string> {
-  const { base64, codigo } = extrairQr(d);
-  if (base64) return base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}`;
-  if (codigo) return QRCode.toDataURL(codigo, { width: 280, margin: 1 });
-  return "";
-}
-
-async function estadoDaInstancia(instancia: string): Promise<{ estado: string; numero: string; erro: string }> {
-  const r = await evolution(`/instance/connectionState/${encodeURIComponent(instancia)}`, "GET");
-  if (r.status === 404) return { estado: "sem-instancia", numero: "", erro: "" };
-  if (!r.ok) return { estado: "", numero: "", erro: r.erro };
-  const estado = String(r.dados?.instance?.state ?? r.dados?.state ?? "");
-  let numero = "";
-  if (estado === "open") {
-    const li = await evolution(`/instance/fetchInstances?instanceName=${encodeURIComponent(instancia)}`, "GET");
-    if (li.ok) {
-      const lista = Array.isArray(li.dados) ? li.dados : [li.dados];
-      for (const item of lista) {
-        const inst = item?.instance ?? item;
-        const nome = String(inst?.instanceName ?? inst?.name ?? "");
-        if (nome === instancia) {
-          numero = String(inst?.ownerJid ?? inst?.owner ?? "").replace(/@.*$/, "");
-          break;
-        }
-      }
-    }
-  }
-  return { estado, numero, erro: "" };
-}
-
-export async function zapStatusAcao(_a: EstadoZap): Promise<EstadoZap> {
-  const u = await autorizar(OPERACAO);
-  if ("erro" in u) return { erro: u.erro, ok: "", estado: "", numero: "", qr: "" };
-  const instancia = await lerParametro("zap.instancia", "americasim");
-  const s = await estadoDaInstancia(instancia);
-  if (s.erro) return { erro: s.erro, ok: "", estado: "", numero: "", qr: "" };
-  const texto =
-    s.estado === "open" ? `Conectado${s.numero ? ` como +${s.numero}` : ""}. Pronto para avisar.` :
-    s.estado === "connecting" ? "Aguardando leitura do QR — gere um novo se o último expirou." :
-    s.estado === "sem-instancia" ? "Instância ainda não existe — clique Conectar para criar e gerar o QR." :
-    `Desconectado (${s.estado || "estado desconhecido"}). Clique Conectar para gerar o QR.`;
-  return { erro: "", ok: texto, estado: s.estado, numero: s.numero, qr: "" };
-}
-
-export async function zapConectarAcao(_a: EstadoZap): Promise<EstadoZap> {
-  const u = await autorizar(ADMIN);
-  if ("erro" in u) return { erro: u.erro, ok: "", estado: "", numero: "", qr: "" };
-  const instancia = await lerParametro("zap.instancia", "americasim");
-
-  // Já conectado? Não derrubar sessão viva gerando QR à toa.
-  const s0 = await estadoDaInstancia(instancia);
-  if (s0.erro) return { erro: s0.erro, ok: "", estado: "", numero: "", qr: "" };
-  if (s0.estado === "open") {
-    return { erro: "", ok: `Já conectado${s0.numero ? ` como +${s0.numero}` : ""}. Para trocar de número, desconecte primeiro.`, estado: "open", numero: s0.numero, qr: "" };
-  }
-
-  let qr = "";
-  if (s0.estado === "sem-instancia") {
-    const cr = await evolution("/instance/create", "POST", { instanceName: instancia, integration: "WHATSAPP-BAILEYS", qrcode: true });
-    if (!cr.ok) return { erro: cr.erro, ok: "", estado: "", numero: "", qr: "" };
-    qr = await qrParaTela(cr.dados);
-  }
-  if (!qr) {
-    const cn = await evolution(`/instance/connect/${encodeURIComponent(instancia)}`, "GET");
-    if (!cn.ok) return { erro: cn.erro, ok: "", estado: "", numero: "", qr: "" };
-    qr = await qrParaTela(cn.dados);
-  }
-  await auditar("requisicoes.zap.conectar", { usuarioId: u.id, entidade: "parametro", depois: { instancia, qr: qr ? "gerado" : "nao veio" } });
-  if (!qr) return { erro: "A Evolution não devolveu QR (nem código). Espere alguns segundos e clique de novo.", ok: "", estado: "connecting", numero: "", qr: "" };
-  return { erro: "", ok: "QR gerado. No celular do número-robô: WhatsApp → Aparelhos conectados → Conectar aparelho → escanear. Depois clique Ver status.", estado: "connecting", numero: "", qr };
-}
-
-export async function zapDesconectarAcao(_a: EstadoZap): Promise<EstadoZap> {
-  const u = await autorizar(ADMIN);
-  if ("erro" in u) return { erro: u.erro, ok: "", estado: "", numero: "", qr: "" };
-  const instancia = await lerParametro("zap.instancia", "americasim");
-  const r = await evolution(`/instance/logout/${encodeURIComponent(instancia)}`, "DELETE");
-  if (!r.ok && r.status !== 404) return { erro: r.erro, ok: "", estado: "", numero: "", qr: "" };
-  await auditar("requisicoes.zap.desconectar", { usuarioId: u.id, entidade: "parametro", depois: { instancia } });
-  return { erro: "", ok: "Desconectado. Clique Conectar para gerar um QR novo (pode ser outro número).", estado: "close", numero: "", qr: "" };
 }
 
 // ---------------------------------------------------------------- requisicao
