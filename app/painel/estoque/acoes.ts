@@ -8,6 +8,7 @@
 // (Foi exatamente o que aconteceu em 18/08/2026 com a tela de estoque.)
 
 import { revalidatePath } from "next/cache";
+import { db } from "../../../lib/db";
 import {
   corrigir,
   darBaixa,
@@ -188,5 +189,69 @@ export async function corrigirAcao(
     // Erro de validacao e de papel sao mensagens escritas para o operador ler —
     // engoli-las num "falha generica" faria ele tentar de novo do mesmo jeito.
     return { erro: String(e?.message ?? "Falha ao corrigir. Nada foi alterado."), ok: "", detalhes: [] };
+  }
+}
+
+// ============================================================================
+// Alocacao do ESTOQUE DO FORNECEDOR (migracao 016, 02/09): codigos entram sem
+// produto ("chega do fornecedor primeiro") e viram estoque vendavel de um SKU
+// aqui — os N mais antigos do fornecedor/lote escolhido. Reversivel: alocar de
+// volta e so uma nova alocacao futura; tirar de venda e a baixa "interno".
+// ============================================================================
+
+export async function alocarFornecedorAcao(
+  _anterior: EstadoMovimento,
+  form: FormData,
+): Promise<EstadoMovimento> {
+  const u = await autorizar();
+  if ("erro" in u) return u;
+
+  const fornecedorId = String(form.get("fornecedor_id") ?? "").trim();
+  const lote = String(form.get("lote") ?? "").trim();
+  const varianteId = String(form.get("variante_id") ?? "").trim();
+  const quantidade = Number(String(form.get("quantidade") ?? "").trim());
+
+  if (!varianteId) return { erro: "Escolha o SKU que vai receber os códigos.", ok: "", detalhes: [] };
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 10000) {
+    return { erro: "Quantidade inválida (1 a 10000).", ok: "", detalhes: [] };
+  }
+
+  try {
+    const v = await db.query("select sku from variante where id = $1 and ativo", [varianteId]);
+    if (v.rows.length === 0) return { erro: "SKU não encontrado (ou inativo).", ok: "", detalhes: [] };
+
+    const r = await db.query(
+      `update estoque_esim set variante_id = $1
+        where id in (
+          select id from estoque_esim
+           where variante_id is null
+             and status = 'disponivel'
+             and ($2 = '' or fornecedor_id::text = $2)
+             and ($3 = '' or lote = $3)
+           order by criado_em
+           limit $4)
+        returning id`,
+      [varianteId, fornecedorId, lote, quantidade],
+    );
+    const alocados = r.rowCount ?? 0;
+
+    await auditar("estoque.alocar", {
+      usuarioId: u.id,
+      entidade: "estoque_esim",
+      depois: { varianteId, sku: v.rows[0].sku, fornecedorId: fornecedorId || "qualquer", lote: lote || "qualquer", pedidos: quantidade, alocados },
+    });
+    recarregar("");
+
+    if (alocados === 0) {
+      return { erro: "Nenhum código alocado — não havia códigos sem produto nesse fornecedor/lote.", ok: "", detalhes: [] };
+    }
+    return {
+      erro: "",
+      ok: `${alocados} código(s) alocado(s) ao SKU ${v.rows[0].sku}${alocados < quantidade ? ` (pedidos ${quantidade}, havia ${alocados})` : ""}. Já contam como estoque do produto.`,
+      detalhes: [],
+    };
+  } catch (e: any) {
+    console.error("alocarFornecedorAcao:", e);
+    return { erro: "Falha ao alocar. Nada foi alterado.", ok: "", detalhes: [String(e?.message ?? "")] };
   }
 }

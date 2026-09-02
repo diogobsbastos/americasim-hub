@@ -107,7 +107,8 @@ export default function CartaoRequisicoes({
         </h2>
         <p className="nota" style={{ marginTop: 0 }}>
           CSV que chega por e-mail vira lote pendente — nada entra no estoque sem um clique seu.
-          Com código LPA no arquivo, o eSIM entra pronto para vender; só ICCID entra como pool.
+          Aprovar SEM escolher SKU guarda tudo como <b>estoque do fornecedor</b> (fora de venda,
+          para alocar depois na tela Estoque); escolhendo um SKU, já entra vendável nele.
           Aprovação responde o e-mail do remetente e avisa no Zap.
         </p>
         {pendentes.length === 0 ? <p className="nota">Nenhum lote pendente.</p> : null}
@@ -124,9 +125,9 @@ export default function CartaoRequisicoes({
                 <form action={aApr} style={{ display: "flex", gap: 10, alignItems: "end", flexWrap: "wrap" }}>
                   <input type="hidden" name="lote_id" value={l.id} />
                   <label style={{ fontSize: "0.78rem", color: "var(--texto-fraco)" }}>
-                    SKU de destino{" "}
-                    <select name="variante_id" required defaultValue="" style={{ display: "block", marginTop: 4 }}>
-                      <option value="" disabled>escolha…</option>
+                    Destino{" "}
+                    <select name="variante_id" defaultValue="" style={{ display: "block", marginTop: 4 }}>
+                      <option value="">— estoque do fornecedor (alocar depois)</option>
                       {variantes.map((v) => (
                         <option key={v.id} value={v.id}>{v.sku} ({v.modo})</option>
                       ))}
