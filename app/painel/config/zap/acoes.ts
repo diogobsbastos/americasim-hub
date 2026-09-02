@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "../../../../lib/db";
 import { salvarSegredoApp } from "../../../../lib/segredo-app";
 import { auditar, usuarioDaSessao } from "../../../../lib/painel/sessao";
-import { avisarZap, estadoDaInstancia, evolution, instanciaZap, qrParaTela } from "../../../../lib/zap";
+import { avisarZap, estadoDaInstancia, evolution, instanciaZap, pareceInexistente, qrParaTela } from "../../../../lib/zap";
 import type { EstadoZap, EstadoZapCfg } from "./tipos";
 
 const CAMINHO = "/painel/config/zap";
@@ -111,7 +111,7 @@ export async function zapDesconectarAcao(_a: EstadoZap): Promise<EstadoZap> {
   if ("erro" in u) return { erro: u.erro, ok: "", estado: "", numero: "", qr: "" };
   const instancia = await instanciaZap();
   const r = await evolution(`/instance/logout/${encodeURIComponent(instancia)}`, "DELETE");
-  if (!r.ok && r.status !== 404) return { erro: r.erro, ok: "", estado: "", numero: "", qr: "" };
+  if (!r.ok && !pareceInexistente(r)) return { erro: r.erro, ok: "", estado: "", numero: "", qr: "" };
   await auditar("config.zap.desconectar", { usuarioId: u.id, entidade: "parametro", depois: { instancia } });
   return { erro: "", ok: "Desconectado. Clique Conectar para gerar um QR novo (pode ser outro número).", estado: "close", numero: "", qr: "" };
 }

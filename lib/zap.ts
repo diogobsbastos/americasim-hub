@@ -70,9 +70,17 @@ export async function qrParaTela(d: any): Promise<string> {
   return "";
 }
 
+// Instancia inexistente: versoes da Evolution respondem 404, mas a instalada
+// aqui responde 400 com "TypeError: Cannot read properties of undefined
+// (reading 'state')" — os dois significam a mesma coisa: ainda nao foi criada.
+export function pareceInexistente(r: { status: number; dados: any }): boolean {
+  if (r.status === 404) return true;
+  return r.status === 400 && JSON.stringify(r.dados ?? "").includes("Cannot read properties of undefined");
+}
+
 export async function estadoDaInstancia(instancia: string): Promise<{ estado: string; numero: string; erro: string }> {
   const r = await evolution(`/instance/connectionState/${encodeURIComponent(instancia)}`, "GET");
-  if (r.status === 404) return { estado: "sem-instancia", numero: "", erro: "" };
+  if (pareceInexistente(r)) return { estado: "sem-instancia", numero: "", erro: "" };
   if (!r.ok) return { estado: "", numero: "", erro: r.erro };
   const estado = String(r.dados?.instance?.state ?? r.dados?.state ?? "");
   let numero = "";
