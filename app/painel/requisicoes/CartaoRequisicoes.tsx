@@ -1,8 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { aprovarLoteAcao, enviarRequisicaoAcao, rejeitarLoteAcao, salvarConfigReqAcao, testarZapAcao } from "./acoes";
-import { ESTADO_REQ_INICIAL } from "./tipos";
+import { aprovarLoteAcao, enviarRequisicaoAcao, rejeitarLoteAcao, salvarConfigReqAcao, testarZapAcao, zapConectarAcao, zapDesconectarAcao, zapStatusAcao } from "./acoes";
+import { ESTADO_REQ_INICIAL, ESTADO_ZAP_INICIAL } from "./tipos";
 
 export interface LoteTela {
   id: string;
@@ -55,6 +55,9 @@ export default function CartaoRequisicoes({
   const [eRej, aRej, pRej] = useActionState(rejeitarLoteAcao, ESTADO_REQ_INICIAL);
   const [eCfg, aCfg, pCfg] = useActionState(salvarConfigReqAcao, ESTADO_REQ_INICIAL);
   const [eZap, aZap, pZap] = useActionState(testarZapAcao, ESTADO_REQ_INICIAL);
+  const [eZs, aZs, pZs] = useActionState(zapStatusAcao, ESTADO_ZAP_INICIAL);
+  const [eZc, aZc, pZc] = useActionState(zapConectarAcao, ESTADO_ZAP_INICIAL);
+  const [eZd, aZd, pZd] = useActionState(zapDesconectarAcao, ESTADO_ZAP_INICIAL);
 
   const pendentes = lotes.filter((l) => l.status === "pendente");
   const tratados = lotes.filter((l) => l.status !== "pendente");
@@ -164,6 +167,41 @@ export default function CartaoRequisicoes({
         </form>
         <Resultado e={eCfg} />
         <Resultado e={eZap} />
+      </div>
+
+      <div className="cartao" style={{ marginBottom: 18 }}>
+        <h2 style={{ fontSize: "0.95rem", textTransform: "uppercase", margin: "0 0 6px" }}>Conexão do WhatsApp (número-robô)</h2>
+        <p className="nota" style={{ marginTop: 0 }}>
+          Ativação toda por aqui — criar a instância, escanear o QR e trocar de número no futuro, sem SSH.
+          Usa a instância da Configuração acima ({zapInstancia ? <b>{zapInstancia}</b> : <b>defina e guarde primeiro</b>}) e a API key do cofre.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {podeOperar ? (
+            <form action={aZs}>
+              <button type="submit" className="secundario" disabled={pZs}>{pZs ? "Consultando…" : "Ver status"}</button>
+            </form>
+          ) : null}
+          {podeAdmin ? (
+            <>
+              <form action={aZc}>
+                <button type="submit" disabled={pZc}>{pZc ? "Gerando QR…" : "Conectar / gerar QR"}</button>
+              </form>
+              <form action={aZd}>
+                <button type="submit" className="secundario" disabled={pZd}>{pZd ? "Desconectando…" : "Desconectar (trocar número)"}</button>
+              </form>
+            </>
+          ) : null}
+        </div>
+        {eZc.qr ? (
+          <div style={{ marginTop: 12 }}>
+            {/* Fundo branco de proposito: QR precisa de contraste para a camera, claro ou escuro. */}
+            <img src={eZc.qr} alt="QR para conectar o WhatsApp do número-robô" width={260} height={260} style={{ background: "#fff", padding: 8, borderRadius: 8, display: "block" }} />
+            <p className="nota">O QR expira em menos de um minuto — se não der tempo, clique Conectar de novo. Depois de escanear, confira com Ver status.</p>
+          </div>
+        ) : null}
+        <Resultado e={eZs} />
+        <Resultado e={eZc} />
+        <Resultado e={eZd} />
       </div>
     </>
   );
