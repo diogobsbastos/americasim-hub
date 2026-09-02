@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { criarFornecedor, alternarFornecedor, vincularSkus } from "./acoes";
+import { criarFornecedor, alternarFornecedor, salvarEmailFornecedor, vincularSkus } from "./acoes";
 import { ESTADO_FORN_INICIAL, type LinhaFornecedor, type LinhaSku } from "./tipos";
 
 const ROTULO_MODO: Record<string, string> = {
@@ -31,6 +31,7 @@ export default function PainelFornecedores({
   const [eNovo, aNovo, pNovo] = useActionState(criarFornecedor, ESTADO_FORN_INICIAL);
   const [eAlt, aAlt, pAlt] = useActionState(alternarFornecedor, ESTADO_FORN_INICIAL);
   const [eVinc, aVinc, pVinc] = useActionState(vincularSkus, ESTADO_FORN_INICIAL);
+  const [eMail, aMail, pMail] = useActionState(salvarEmailFornecedor, ESTADO_FORN_INICIAL);
 
   const ativos = fornecedores.filter((f) => f.ativo);
   const semFornecedor = skus.filter((s) => !s.fornecedorId).length;
@@ -51,8 +52,9 @@ export default function PainelFornecedores({
       <div className="cartao">
         <h2 style={{ margin: "0 0 4px", fontSize: "1rem" }}>Quem fornece</h2>
         <p style={{ margin: "0 0 14px", color: "var(--texto-fraco)", fontSize: "0.85rem" }}>
-          A operadora ou o intermediario de quem a gente compra o eSIM. Vodafone, T-Mobile,
-          China Mobile.
+          A operadora ou o intermediario de quem a gente compra o eSIM. O <b>e-mail de
+          requisição</b> é para onde a tela Requisições manda o pedido de ICCIDs — e é por
+          ele que o robô reconhece de quem veio o CSV de resposta.
         </p>
 
         {fornecedores.length === 0 ? (
@@ -67,6 +69,23 @@ export default function PainelFornecedores({
                       <b>{f.nome}</b>
                       {f.ativo ? null : (
                         <span style={{ color: "var(--texto-fraco)", fontSize: "0.78rem" }}> · inativo</span>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px 4px" }}>
+                      {podeMexer ? (
+                        <form action={aMail} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          <input type="hidden" name="id" value={f.id} />
+                          <input
+                            name="email"
+                            defaultValue={f.email}
+                            placeholder="e-mail de requisição"
+                            style={{ width: 220, fontSize: "0.82rem" }}
+                            disabled={pMail}
+                          />
+                          <button type="submit" className="botao secundario" disabled={pMail}>ok</button>
+                        </form>
+                      ) : (
+                        <span style={{ color: "var(--texto-fraco)", fontSize: "0.84rem" }}>{f.email || "—"}</span>
                       )}
                     </td>
                     <td style={{ padding: "10px 4px", color: "var(--texto-fraco)", fontSize: "0.84rem" }}>
@@ -89,10 +108,12 @@ export default function PainelFornecedores({
           </div>
         )}
         <Recado erro={eAlt?.erro ?? ""} ok={eAlt?.ok ?? ""} />
+        <Recado erro={eMail?.erro ?? ""} ok={eMail?.ok ?? ""} />
 
         {podeMexer ? (
           <form action={aNovo} style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
             <input name="nome" placeholder="T-Mobile" style={{ flex: "1 1 180px", width: "auto" }} />
+            <input name="email" type="email" placeholder="e-mail de requisicao (opcional)" style={{ flex: "1 1 200px", width: "auto" }} />
             <input name="contato" placeholder="contato ou observacao (opcional)" style={{ flex: "2 1 220px", width: "auto" }} />
             <button type="submit" disabled={pNovo}>{pNovo ? "Cadastrando…" : "Cadastrar"}</button>
           </form>

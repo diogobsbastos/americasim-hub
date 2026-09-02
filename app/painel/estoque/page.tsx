@@ -37,7 +37,7 @@ export default async function EstoqueGeral({
        and ($4 = '' or e.lote ilike '%' || $4 || '%')`;
   const args = [fProd, fSku, fStatus, fLote];
 
-  const [produtos, variantes, resumo, atencao, codigos, quantos, historico] = await Promise.all([
+  const [produtos, variantes, resumo, porFornecedor, atencao, codigos, quantos, historico] = await Promise.all([
     db.query("select handle, nome from produto order by nome"),
     db.query(
       `select distinct v.sku from variante v join produto p on p.id = v.produto_id
@@ -58,6 +58,24 @@ export default async function EstoqueGeral({
         group by p.handle, p.nome, v.sku
         order by p.nome, v.sku`,
       [fProd],
+    ),
+    // Administracao de ICCIDs por FORNECEDOR e lote (02/09): quantos vieram,
+    // quantos ja foram usados, quantos restam — organizado para o dia em que
+    // houver mais de um fornecedor. "—" = linha antiga sem fornecedor marcado.
+    db.query(
+      `select coalesce(f.nome, nullif(e.operadora, ''), '—') as fornecedor,
+              coalesce(nullif(e.lote, ''), '(sem lote)') as lote,
+              count(*)::int as total,
+              count(*) filter (where e.status = 'disponivel')::int as disponivel,
+              count(*) filter (where e.status = 'reservado')::int  as reservado,
+              count(*) filter (where e.status = 'entregue')::int   as entregue,
+              count(*) filter (where e.status not in ('disponivel','reservado','entregue'))::int as fora,
+              max(e.criado_em) as ultimo
+         from estoque_esim e
+         left join fornecedor f on f.id = e.fornecedor_id
+        group by 1, 2
+        order by max(e.criado_em) desc
+        limit 40`,
     ),
     // Variantes marcadas como visiveis que estao sem codigo livre.
     // Desde a migracao 007 elas SOMEM da vitrine sozinhas — entao isto virou
@@ -225,6 +243,53 @@ export default async function EstoqueGeral({
                   <Link href={`/painel/estoque?v=${encodeURIComponent(r.sku)}`}>ver códigos</Link>
                   {" · "}
                   <Link href={`/painel/produtos/${r.handle}/estoque`}>entrada de lote</Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ------------------------------------------- por fornecedor e lote */}
+      <h2 style={{ fontSize: "1.1rem", margin: "0 0 4px" }}>Por fornecedor e lote</h2>
+      <p style={{ color: "var(--texto-fraco)", margin: "0 0 12px", fontSize: "0.88rem" }}>
+        De quem veio cada carga de ICCIDs e quanto dela já foi usada. Lotes aprovados nas
+        Requisições entram aqui marcados com o fornecedor do remetente.
+      </p>
+      <div className="cartao" style={{ padding: 0, overflowX: "auto", marginBottom: 22 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
+          <thead>
+            <tr style={{ textAlign: "left", color: "var(--texto-fraco)", fontSize: "0.7rem" }}>
+              <th style={{ padding: "11px 14px", fontWeight: 600 }}>FORNECEDOR</th>
+              <th style={{ padding: "11px 14px", fontWeight: 600 }}>LOTE</th>
+              <th style={{ padding: "11px 14px", fontWeight: 600, textAlign: "right" }}>RECEBIDOS</th>
+              <th style={{ padding: "11px 14px", fontWeight: 600, textAlign: "right" }}>DISPONÍVEL</th>
+              <th style={{ padding: "11px 14px", fontWeight: 600, textAlign: "right" }}>RESERVADO</th>
+              <th style={{ padding: "11px 14px", fontWeight: 600, textAlign: "right" }}>ENTREGUE</th>
+              <th style={{ padding: "11px 14px", fontWeight: 600, textAlign: "right" }}>FORA</th>
+              <th style={{ padding: "11px 14px", fontWeight: 600 }}>ÚLTIMA ENTRADA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {porFornecedor.rows.length === 0 ? (
+              <tr><td colSpan={8} style={{ padding: "11px 14px", color: "var(--texto-fraco)" }}>Nenhum ICCID em estoque ainda.</td></tr>
+            ) : porFornecedor.rows.map((r: any, i: number) => (
+              <tr key={i} style={{ borderTop: "1px solid var(--borda)" }}>
+                <td style={{ padding: "11px 14px" }}>{r.fornecedor}</td>
+                <td style={{ padding: "11px 14px" }}>
+                  <Link href={`/painel/estoque?l=${encodeURIComponent(r.lote === "(sem lote)" ? "" : r.lote)}`}>
+                    <code style={{ fontSize: "0.75rem" }}>{r.lote}</code>
+                  </Link>
+                </td>
+                <td style={{ padding: "11px 14px", textAlign: "right", fontWeight: 700 }}>{r.total}</td>
+                <td style={{ padding: "11px 14px", textAlign: "right" }}>
+                  <span style={{ color: r.disponivel > 0 ? "var(--ok)" : "var(--texto-fraco)", fontWeight: 700 }}>{r.disponivel}</span>
+                </td>
+                <td style={{ padding: "11px 14px", textAlign: "right", color: "var(--texto-fraco)" }}>{r.reservado}</td>
+                <td style={{ padding: "11px 14px", textAlign: "right", color: "var(--texto-fraco)" }}>{r.entregue}</td>
+                <td style={{ padding: "11px 14px", textAlign: "right", color: "var(--texto-fraco)" }}>{r.fora}</td>
+                <td style={{ padding: "11px 14px", color: "var(--texto-fraco)" }}>
+                  {r.ultimo ? new Date(r.ultimo).toLocaleDateString("pt-BR") : "—"}
                 </td>
               </tr>
             ))}
