@@ -7,14 +7,18 @@ import type { LinhaFornecedor, LinhaSku } from "../../../fornecedores/tipos";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Fornecedor — AmericaSim", robots: { index: false, follow: false } };
+export const metadata = { title: "Fornecedor do produto — AmericaSim", robots: { index: false, follow: false } };
 
-export default async function FornecedorDoProduto({ params }: { params: Promise<{ handle: string }> }) {
+export default async function FornecedorDoProduto({
+  params,
+}: {
+  params: Promise<{ handle: string }>;
+}) {
   const { handle } = await params;
   const u = await usuarioDaSessao();
   const podeMexer = u?.papel === "admin" || u?.papel === "operacao";
 
-  const p = await db.query("select id, handle, nome from produto where handle = $1", [handle]);
+  const p = await db.query("select id, nome, handle from produto where handle = $1", [handle]);
   if (p.rows.length === 0) {
     return (
       <div className="aviso">
@@ -27,7 +31,7 @@ export default async function FornecedorDoProduto({ params }: { params: Promise<
 
   const [f, s] = await Promise.all([
     db.query(
-      `select f.id, f.nome, f.ativo,
+      `select f.id, f.nome, f.ativo, coalesce(f.contato->>'email', '') as email,
               (select count(*) from variante v where v.fornecedor_id = f.id)::int as skus
          from fornecedor f order by f.ativo desc, f.nome`,
     ),
@@ -39,7 +43,7 @@ export default async function FornecedorDoProduto({ params }: { params: Promise<
   ]);
 
   const fornecedores: LinhaFornecedor[] = f.rows.map((x: any) => ({
-    id: x.id, nome: x.nome, ativo: x.ativo, skus: x.skus,
+    id: x.id, nome: x.nome, email: x.email, ativo: x.ativo, skus: x.skus,
   }));
   const skus: LinhaSku[] = s.rows.map((x: any) => ({
     varianteId: x.variante_id, sku: x.sku, familia: prod.nome,
