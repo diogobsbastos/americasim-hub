@@ -182,23 +182,24 @@ export async function aprovarLoteAcao(_a: EstadoReq, form: FormData): Promise<Es
     const nomeLote = `easysim-${new Date().toISOString().slice(0, 10)}`;
     let inseridos = 0, comCodigo = 0, repetidos = 0;
     for (const linha of iccids) {
+      const extras = Object.keys(linha.extras).length > 0 ? JSON.stringify(linha.extras) : null;
       let r;
       if (linha.lpa) {
         r = await db.query(
-          `insert into estoque_esim (variante_id, codigo_lpa, codigo_hash, iccid, operadora, status, cifrado, lote, custo_moeda)
-           select $1, $2, $3, $4, 'easysim4u', 'disponivel', true, $5, 'USD'
+          `insert into estoque_esim (variante_id, codigo_lpa, codigo_hash, iccid, operadora, status, cifrado, lote, custo_moeda, dados_chip)
+           select $1, $2, $3, $4, 'easysim4u', 'disponivel', true, $5, 'USD', $6::jsonb
             where not exists (select 1 from estoque_esim where iccid = $4)
            returning id`,
-          [varianteId, cifrarCodigo(linha.lpa), impressaoCodigo(linha.lpa), linha.iccid, nomeLote],
+          [varianteId, cifrarCodigo(linha.lpa), impressaoCodigo(linha.lpa), linha.iccid, nomeLote, extras],
         );
         if (r.rows.length > 0) comCodigo += 1;
       } else {
         r = await db.query(
-          `insert into estoque_esim (variante_id, codigo_lpa, iccid, operadora, status, cifrado, lote, custo_moeda)
-           select $1, ''::bytea, $2, 'cmlink', 'disponivel', false, $3, 'USD'
+          `insert into estoque_esim (variante_id, codigo_lpa, iccid, operadora, status, cifrado, lote, custo_moeda, dados_chip)
+           select $1, ''::bytea, $2, 'cmlink', 'disponivel', false, $3, 'USD', $4::jsonb
             where not exists (select 1 from estoque_esim where iccid = $2)
            returning id`,
-          [varianteId, linha.iccid, nomeLote],
+          [varianteId, linha.iccid, nomeLote, extras],
         );
       }
       if (r.rows.length > 0) inseridos += 1; else repetidos += 1;

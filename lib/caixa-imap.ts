@@ -160,14 +160,17 @@ async function verificarNovas(): Promise<void> {
 }
 
 // ------------------------------------------------------------ parser do CSV
-// Tolerante de proposito: o formato exato do fornecedor pode variar. Detecta o
-// separador, acha a coluna de ICCID (18–20 digitos) e, se houver, a de LPA
-// (texto com $). O que o parser entendeu vai como PREVIA para a tela — e um
-// humano confere antes de qualquer coisa entrar no estoque.
+// O formato REAL da EasySim4u (visto em 02/09):
+//   HIMSI;ICCID;MSISDN;PIN;PUK;ESIM_URL
+// com ESIM_URL trazendo o LPA completo — ou seja, lote aprovado ja vem com QR
+// pronto para vender. Cabecalho e mapeado por NOME quando existe; a heuristica
+// (ICCID 18–20 digitos, LPA com '$') cobre arquivo sem cabecalho ou diferente.
+// O que o parser entendeu vira PREVIA na tela — humano confere antes de entrar.
 
 export interface LinhaCsv {
   iccid: string;
   lpa: string | null;
+  extras: Record<string, string>;
 }
 
 export function parsearCsv(texto: string): {
@@ -179,18 +182,49 @@ export function parsearCsv(texto: string): {
   const primeira = linhas[0] ?? "";
   const sep = primeira.includes(";") ? ";" : primeira.includes("\t") ? "\t" : ",";
 
+  // Linha de cabecalho tem letras e nenhum '$'; linha de dados com LPA tem '$'.
+  const temCabecalho = !primeira.includes("$") && /[a-z]/i.test(primeira);
+  const colunas = temCabecalho ? primeira.split(sep).map((c) => c.trim().toLowerCase()) : [];
+  const idx = (nomes: string[]) => colunas.findIndex((c) => nomes.some((n) => c.includes(n)));
+  const iIccid = idx(["iccid"]);
+  const iLpa = idx(["esim", "lpa", "url", "qr"]);
+  const extrasMapa = ([
+    ["himsi", idx(["himsi", "imsi"])],
+    ["msisdn", idx(["msisdn", "phone", "numero"])],
+    ["pin", idx(["pin"])],
+    ["puk", idx(["puk"])],
+  ] as [string, number][]).filter(([, i]) => i >= 0);
+
+  const dados = temCabecalho ? linhas.slice(1) : linhas;
   const achadas: LinhaCsv[] = [];
-  for (const linha of linhas) {
+  for (const linha of dados) {
     const celulas = linha.split(sep).map((c) => c.trim().replace(/^"|"$/g, ""));
     let iccid = "";
     let lpa: string | null = null;
-    for (const cel of celulas) {
-      const digitos = cel.replace(/\D/g, "");
-      const soNumero = /^[\d\s-]+$/.test(cel);
-      if (!iccid && soNumero && digitos.length >= 18 && digitos.length <= 20) iccid = digitos;
-      if (!lpa && cel.includes("$") && /lpa:|\$[^$]+\$/i.test(cel)) lpa = cel;
+
+    if (iIccid >= 0) {
+      const d = (celulas[iIccid] ?? "").replace(/\D/g, "");
+      if (d.length >= 18 && d.length <= 20) iccid = d;
     }
-    if (iccid) achadas.push({ iccid, lpa });
+    if (iLpa >= 0 && celulas[iLpa]?.includes("$")) lpa = celulas[iLpa];
+
+    // Heuristica: cobre arquivo sem cabecalho ou com colunas fora do esperado.
+    if (!iccid || !lpa) {
+      for (const cel of celulas) {
+        const digitos = cel.replace(/\D/g, "");
+        const soNumero = /^[\d\s-]+$/.test(cel);
+        if (!iccid && soNumero && digitos.length >= 18 && digitos.length <= 20) iccid = digitos;
+        if (!lpa && cel.includes("$") && /lpa:|\$[^$]+\$/i.test(cel)) lpa = cel;
+      }
+    }
+    if (!iccid) continue;
+
+    const extras: Record<string, string> = {};
+    for (const [nome, i] of extrasMapa) {
+      const v = (celulas[i] ?? "").trim();
+      if (v) extras[nome] = v;
+    }
+    achadas.push({ iccid, lpa, extras });
   }
 
   const unicos = new Map<string, LinhaCsv>();
@@ -202,10 +236,12 @@ export function parsearCsv(texto: string): {
     iccids,
     resumo: {
       separador: sep === "\t" ? "tab" : sep,
+      cabecalho: temCabecalho ? colunas : null,
+      campos_extras: extrasMapa.map(([n]) => n),
       total_linhas: linhas.length,
       iccids: iccids.length,
       com_lpa: iccids.filter((x) => x.lpa).length,
-      amostra: iccids.slice(0, 5),
+      amostra: iccids.slice(0, 5).map((x) => ({ iccid: x.iccid, com_lpa: !!x.lpa })),
     },
   };
 }
