@@ -22,7 +22,10 @@ export default async function Requisicoes() {
     db.query("select valor from parametro where chave = 'caixa.remetentes'"),
   ]);
   const destino = String(pDestino.rows[0]?.valor ?? "").trim() || "admin@easysim4u.com";
-  const remetentes = String(pRemetentes.rows[0]?.valor ?? "").trim() || "admin@easysim4u.com";
+  const remetentes = Array.from(new Set(
+    (String(pRemetentes.rows[0]?.valor ?? "").trim() || "admin@easysim4u.com")
+      .split(",").map((x) => x.trim().toLowerCase()).filter(Boolean),
+  ));
 
   const lotesBrutos = await db.query(
     `select id, remetente, assunto, arquivo_nome, recebido_em, linhas, iccids, previa, status, resultado

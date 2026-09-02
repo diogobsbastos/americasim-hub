@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { aprovarLoteAcao, enviarRequisicaoAcao, rejeitarLoteAcao, salvarConfigReqAcao } from "./acoes";
+import { adicionarRemetenteAcao, aprovarLoteAcao, editarRemetenteAcao, enviarRequisicaoAcao, rejeitarLoteAcao, removerRemetenteAcao, salvarConfigReqAcao } from "./acoes";
 import { ESTADO_REQ_INICIAL } from "./tipos";
 
 export interface LoteTela {
@@ -52,7 +52,7 @@ const campo = { width: "100%", maxWidth: 520 } as const;
 export default function CartaoRequisicoes({
   destino, remetentes, caixaLigada, caixaErro, lotes, requisicoes, variantes, fornecedores, fornecedorPadrao, podeAdmin, podeOperar,
 }: {
-  destino: string; remetentes: string;
+  destino: string; remetentes: string[];
   caixaLigada: boolean; caixaErro: string;
   lotes: LoteTela[]; requisicoes: RequisicaoTela[]; variantes: VarianteOpcao[];
   fornecedores: FornecedorOpcao[]; fornecedorPadrao: string;
@@ -62,6 +62,9 @@ export default function CartaoRequisicoes({
   const [eApr, aApr, pApr] = useActionState(aprovarLoteAcao, ESTADO_REQ_INICIAL);
   const [eRej, aRej, pRej] = useActionState(rejeitarLoteAcao, ESTADO_REQ_INICIAL);
   const [eCfg, aCfg, pCfg] = useActionState(salvarConfigReqAcao, ESTADO_REQ_INICIAL);
+  const [eAdd, aAdd, pAdd] = useActionState(adicionarRemetenteAcao, ESTADO_REQ_INICIAL);
+  const [eEdi, aEdi, pEdi] = useActionState(editarRemetenteAcao, ESTADO_REQ_INICIAL);
+  const [eRem, aRem, pRem] = useActionState(removerRemetenteAcao, ESTADO_REQ_INICIAL);
 
   const pendentes = lotes.filter((l) => l.status === "pendente");
   const tratados = lotes.filter((l) => l.status !== "pendente");
@@ -158,16 +161,48 @@ export default function CartaoRequisicoes({
           <form action={aCfg} autoComplete="off">
             <label style={rotulo} htmlFor="cd">Destino da requisição (e-mail da EasySim4u)</label>
             <input id="cd" name="destino" defaultValue={destino} style={campo} disabled={pCfg} />
-            <label style={rotulo} htmlFor="cr">Remetentes autorizados a mandar CSV (vírgula; “@dominio.com” autoriza o domínio inteiro)</label>
-            <input id="cr" name="remetentes" defaultValue={remetentes} style={campo} disabled={pCfg} />
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               <button type="submit" disabled={pCfg}>{pCfg ? "Guardando…" : "Guardar"}</button>
             </div>
           </form>
         ) : (
-          <p className="nota">Destino: <b>{destino}</b> · Remetentes: <b>{remetentes}</b></p>
+          <p className="nota">Destino: <b>{destino}</b></p>
         )}
         <Resultado e={eCfg} />
+
+        <h3 style={{ fontSize: "0.85rem", textTransform: "uppercase", margin: "18px 0 4px" }}>Remetentes autorizados a mandar CSV</h3>
+        <p className="nota" style={{ marginTop: 0 }}>
+          O robô só aceita CSV vindo destes endereços. Um <code>@dominio.com</code> autoriza o domínio inteiro.
+        </p>
+        {remetentes.length === 0 ? <p className="nota">Nenhum remetente autorizado.</p> : null}
+        {remetentes.map((r) => (
+          <div key={r} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", borderTop: "1px solid var(--borda)", padding: "8px 0" }}>
+            {podeAdmin ? (
+              <>
+                <form action={aEdi} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <input type="hidden" name="antigo" value={r} />
+                  <input name="remetente" defaultValue={r} style={{ width: 280, fontSize: "0.84rem" }} disabled={pEdi} />
+                  <button type="submit" className="secundario" disabled={pEdi}>Salvar</button>
+                </form>
+                <form action={aRem}>
+                  <input type="hidden" name="remetente" value={r} />
+                  <button type="submit" className="secundario" disabled={pRem}>Remover</button>
+                </form>
+              </>
+            ) : (
+              <code style={{ fontSize: "0.84rem" }}>{r}</code>
+            )}
+          </div>
+        ))}
+        {podeAdmin ? (
+          <form action={aAdd} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
+            <input name="remetente" placeholder="novo@email.com ou @dominio.com" style={{ width: 280, fontSize: "0.84rem" }} disabled={pAdd} />
+            <button type="submit" disabled={pAdd}>{pAdd ? "Adicionando…" : "Adicionar"}</button>
+          </form>
+        ) : null}
+        <Resultado e={eAdd} />
+        <Resultado e={eEdi} />
+        <Resultado e={eRem} />
       </div>
     </>
   );

@@ -45,18 +45,89 @@ export async function salvarConfigReqAcao(_a: EstadoReq, form: FormData): Promis
   if ("erro" in u) return { erro: u.erro, ok: "" };
 
   const destino = String(form.get("destino") ?? "").trim().toLowerCase();
-  const remetentes = String(form.get("remetentes") ?? "").trim().toLowerCase();
   if (destino && !destino.includes("@")) return { erro: "Destino deve ser um e-mail.", ok: "" };
-
   if (destino) await gravarParametro("requisicao.destino", destino, "Para onde vai a requisicao de ICCIDs", u.id);
-  if (remetentes) await gravarParametro("caixa.remetentes", remetentes, "Remetentes autorizados a mandar CSV (virgula; @dominio.com autoriza o dominio)", u.id);
 
   await auditar("requisicoes.config", {
     usuarioId: u.id, entidade: "parametro",
-    depois: { destino, remetentes },
+    depois: { destino },
   });
   revalidatePath(CAMINHO);
   return { erro: "", ok: "Configuração guardada." };
+}
+
+// ------------------------------------------- remetentes autorizados (LISTA)
+// Regra da casa (02/09): "toda lista tem que ter esse tipo" — listagem +
+// inserir + editar + excluir, item a item. O armazenamento continua compacto
+// (parametro caixa.remetentes, separado por virgula) — a regra e da UI.
+
+function normalizarRemetente(v: unknown): string {
+  return String(v ?? "").trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function remetenteValido(v: string): boolean {
+  // e-mail completo OU "@dominio.com" (autoriza o dominio inteiro)
+  return /^@?[^@\s]+\.[^@\s]+$/.test(v) && (v.startsWith("@") || v.includes("@"));
+}
+
+async function lerRemetentes(): Promise<string[]> {
+  const bruto = await lerParametro("caixa.remetentes", "admin@easysim4u.com");
+  return Array.from(new Set(bruto.split(",").map((x) => normalizarRemetente(x)).filter(Boolean)));
+}
+
+async function gravarRemetentes(lista: string[], usuarioId: string) {
+  await gravarParametro(
+    "caixa.remetentes",
+    lista.join(","),
+    "Remetentes autorizados a mandar CSV (virgula; @dominio.com autoriza o dominio)",
+    usuarioId,
+  );
+}
+
+export async function adicionarRemetenteAcao(_a: EstadoReq, form: FormData): Promise<EstadoReq> {
+  const u = await autorizar(ADMIN);
+  if ("erro" in u) return { erro: u.erro, ok: "" };
+  const novo = normalizarRemetente(form.get("remetente"));
+  if (!remetenteValido(novo)) return { erro: "Use um e-mail completo ou @dominio.com.", ok: "" };
+  const lista = await lerRemetentes();
+  if (lista.includes(novo)) return { erro: `${novo} já está na lista.`, ok: "" };
+  lista.push(novo);
+  await gravarRemetentes(lista, u.id);
+  await auditar("requisicoes.remetente.adicionar", { usuarioId: u.id, entidade: "parametro", depois: { remetente: novo } });
+  revalidatePath(CAMINHO);
+  return { erro: "", ok: `${novo} autorizado.` };
+}
+
+export async function editarRemetenteAcao(_a: EstadoReq, form: FormData): Promise<EstadoReq> {
+  const u = await autorizar(ADMIN);
+  if ("erro" in u) return { erro: u.erro, ok: "" };
+  const antigo = normalizarRemetente(form.get("antigo"));
+  const novo = normalizarRemetente(form.get("remetente"));
+  if (!remetenteValido(novo)) return { erro: "Use um e-mail completo ou @dominio.com.", ok: "" };
+  const lista = await lerRemetentes();
+  const i = lista.indexOf(antigo);
+  if (i === -1) return { erro: `${antigo} não está mais na lista.`, ok: "" };
+  if (novo === antigo) return { erro: "", ok: "Nada mudou." };
+  if (lista.includes(novo)) return { erro: `${novo} já está na lista.`, ok: "" };
+  lista[i] = novo;
+  await gravarRemetentes(lista, u.id);
+  await auditar("requisicoes.remetente.editar", { usuarioId: u.id, entidade: "parametro", antes: { remetente: antigo }, depois: { remetente: novo } });
+  revalidatePath(CAMINHO);
+  return { erro: "", ok: `${antigo} → ${novo}.` };
+}
+
+export async function removerRemetenteAcao(_a: EstadoReq, form: FormData): Promise<EstadoReq> {
+  const u = await autorizar(ADMIN);
+  if ("erro" in u) return { erro: u.erro, ok: "" };
+  const alvo = normalizarRemetente(form.get("remetente"));
+  const lista = await lerRemetentes();
+  if (!lista.includes(alvo)) return { erro: `${alvo} não está mais na lista.`, ok: "" };
+  const nova = lista.filter((x) => x !== alvo);
+  if (nova.length === 0) return { erro: "A lista não pode ficar vazia — o robô deixaria de aceitar qualquer CSV.", ok: "" };
+  await gravarRemetentes(nova, u.id);
+  await auditar("requisicoes.remetente.remover", { usuarioId: u.id, entidade: "parametro", antes: { remetente: alvo } });
+  revalidatePath(CAMINHO);
+  return { erro: "", ok: `${alvo} removido.` };
 }
 
 // ---------------------------------------------------------------- requisicao
