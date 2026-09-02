@@ -66,8 +66,11 @@ function normalizarRemetente(v: unknown): string {
 }
 
 function remetenteValido(v: string): boolean {
-  // e-mail completo OU "@dominio.com" (autoriza o dominio inteiro)
-  return /^@?[^@\s]+\.[^@\s]+$/.test(v) && (v.startsWith("@") || v.includes("@"));
+  // "@dominio.com" (autoriza o dominio inteiro) OU e-mail completo.
+  // Bug pago em 02/09: o regex antigo unico tropecava no @ do meio e
+  // rejeitava e-mail normal — agora cada forma tem o seu teste.
+  if (v.startsWith("@")) return /^@[^@\s]+\.[^@\s]+$/.test(v);
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
 }
 
 async function lerRemetentes(): Promise<string[]> {
