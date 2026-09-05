@@ -25,7 +25,8 @@ export async function POST(req: Request) {
   if (!contaId) return erro(401, "sessao_invalida", "Entre de novo na sua conta.");
 
   const r = await db.query(
-    `select cc.email::text as email, c.nome, c.telefone
+    `select cc.email::text as email, c.nome, c.telefone,
+            (cc.senha_hash is not null) as tem_senha
        from conta_cliente cc
        left join cliente c on lower(c.email::text) = lower(cc.email::text)
       where cc.id = $1`,
@@ -47,6 +48,9 @@ export async function POST(req: Request) {
     email: p.email,
     nome: p.nome ?? null,
     telefone: p.telefone ?? null,
+    // Conta que entrou so pelo Google nao tem senha: a tela de perfil oferece
+    // "criar senha" (sem pedir a atual) em vez de "trocar senha".
+    tem_senha: p.tem_senha === true,
     backend: adm.rows.length > 0,
   });
 }

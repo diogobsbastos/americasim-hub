@@ -3,6 +3,8 @@ import { apiGet, chaveConfigurada, formatarDinheiro, modoPagamento } from "../li
 import { marcaAtual } from "../lib/marcas";
 import FormCompra from "./FormCompra";
 import CabLoja from "./CabLoja";
+import CenaViagem from "./CenaViagem";
+import HeroBusca, { type OpcaoPlano } from "./HeroBusca";
 import Rodape from "./Rodape";
 import { IcoAviao, IcoChat, IcoEscudo, IcoIlimitado, IcoQr, IcoRede } from "./Icones";
 
@@ -84,13 +86,25 @@ export default async function Loja() {
   // da Stripe pode morar no cofre cifrado, nao so no ambiente.
   const modoPg = await modoPagamento();
 
+  // O que o formulario de busca do hero precisa saber de cada plano.
+  const opcoesBusca: OpcaoPlano[] = produtos.flatMap((p) =>
+    p.variantes.map((v) => ({
+      sku: v.sku,
+      produto: p.nome,
+      dias: Number(v.atributos?.dias ?? 0),
+      disponivel: v.disponivel,
+    })),
+  );
+
   return (
     <main className="wrap">
       {/* ===== MENU DO TOPO: logo real + navegacao + conta (ciente da sessao) ===== */}
       <CabLoja codigo={marca.codigo} nome={marca.nome} />
 
-      {/* ===== HERO (estrutura do demo aprovado) ===== */}
-      <section className="hero2">
+      {/* ===== HERO: cena de viagem animada ATRAS + busca de plano POR CIMA
+           (pedido do Diogo 05/09; referencia estrutural: hero da Holafly) ===== */}
+      <section className="hero2 hero-cena">
+        <CenaViagem />
         <div>
           <div className="beira">eSIM de viagem · chip digital</div>
           <p className="chamada">
@@ -110,17 +124,8 @@ export default async function Loja() {
             <li>Seu WhatsApp continua o mesmo</li>
             <li>Suporte em português</li>
           </ul>
-          <a className="botao btn-hero" href="#planos">Ver planos →</a>
         </div>
-        <div className="hero-cartao">
-          <h3>Por que {marca.nome}?</h3>
-          <ul>
-            <li>Rede 5G/4G de operadora local — a mesma que o morador usa</li>
-            <li>Instale antes de viajar, com Wi-Fi e calma</li>
-            <li>O plano só começa a contar na ativação, no destino</li>
-            <li>Aparelho incompatível tem reembolso</li>
-          </ul>
-        </div>
+        <HeroBusca opcoes={opcoesBusca} />
       </section>
 
       {modoPg === "demonstracao" ? (
@@ -154,7 +159,7 @@ export default async function Loja() {
 
             <div className="grade">
               {p.variantes.map((v) => (
-                <article key={v.sku} className={v.destaque ? "plano destaque" : "plano"}>
+                <article key={v.sku} id={`plano-${v.sku}`} className={v.destaque ? "plano destaque" : "plano"}>
                   {v.destaque ? <span className="selo">Mais escolhido</span> : null}
 
                   <div className="volume">

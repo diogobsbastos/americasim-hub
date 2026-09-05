@@ -160,6 +160,58 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .hero-cartao ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 0.92rem; }
 .hero-cartao li::before { content: "✓"; color: var(--ok); font-weight: 800; margin-right: 8px; }
 
+/* ===== HERO com cena de viagem animada (beta 05/09) =====
+   A cena e um SVG proprio (app/CenaViagem.tsx) absoluto atras do conteudo;
+   nuvens/aviao/balao animam em CSS puro e param em prefers-reduced-motion. */
+.hero-cena {
+  position: relative; overflow: hidden; border-radius: 22px;
+  padding: 34px 30px 42px; margin-top: 6px;
+  border: 1px solid var(--borda);
+}
+.hero-cena > * { position: relative; z-index: 1; }
+.cena {
+  position: absolute; inset: 0; z-index: 0 !important;
+  width: 100%; height: 100%; pointer-events: none;
+}
+.cena-nuvem { animation: cena-nuvem linear infinite; }
+.cena-nuvem-1 { animation-duration: 95s; animation-delay: -30s; }
+.cena-nuvem-2 { animation-duration: 130s; animation-delay: -80s; }
+.cena-nuvem-3 { animation-duration: 70s; animation-delay: -10s; }
+@keyframes cena-nuvem {
+  from { transform: translateX(-160px); }
+  to { transform: translateX(1400px); }
+}
+.cena-aviao { animation: cena-aviao 46s linear infinite; }
+@keyframes cena-aviao {
+  0% { transform: translate(-220px, 130px); }
+  50% { transform: translate(620px, 70px); }
+  100% { transform: translate(1460px, 110px); }
+}
+.cena-balao { animation: cena-balao 9s ease-in-out infinite; }
+@keyframes cena-balao {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-16px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cena-nuvem, .cena-aviao, .cena-balao { animation: none; }
+}
+
+/* Formulario de busca por cima da cena (estrutura: hero da Holafly) */
+.busca-cartao {
+  background: var(--superficie); border: 1px solid var(--borda); border-radius: 18px;
+  padding: 22px; box-shadow: var(--sombra);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.busca-cartao h3 { margin: 0 0 2px; font-size: 1.02rem; font-family: var(--fonte-titulo); }
+.busca-cartao button { width: 100%; margin-top: 2px; }
+
+/* Plano encontrado pela busca: acende por alguns segundos */
+.plano.brilho { animation: brilho 3.2s ease; }
+@keyframes brilho {
+  0%, 70% { border-color: var(--marca); outline: 1px solid var(--marca); box-shadow: 0 0 0 6px var(--marca-suave), var(--sombra); }
+  100% { box-shadow: var(--sombra); }
+}
+
 .faixa-conf { display: flex; flex-wrap: wrap; gap: 10px 26px; justify-content: center; background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); padding: 14px 20px; margin: 36px 0 0; font-size: 0.88rem; font-weight: 600; color: var(--realce); }
 .faixa-conf span::before { content: "●"; color: var(--marca); font-size: 0.6rem; vertical-align: middle; margin-right: 8px; }
 
