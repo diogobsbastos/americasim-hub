@@ -307,8 +307,10 @@ table.comp2 { width: 100%; border-collapse: collapse; background: var(--superfic
   border-right: 1px solid var(--borda); position: sticky; top: 0; height: 100vh;
   display: flex; flex-direction: column; padding: 18px 14px;
 }
-.ct-logo { display: inline-flex; margin: 2px 8px 20px; }
-.ct-logo .logotipo { height: 32px; }
+.ct-logo { display: inline-flex; margin: 2px 8px 20px; max-width: 100%; }
+/* O logo horizontal (360x42) e mais largo que a sidebar: aqui ele dimensiona
+   pela LARGURA, senao estoura e corta o wordmark. */
+.ct-logo .logotipo { height: auto; width: 100%; max-width: 180px; }
 .ct-nav { display: flex; flex-direction: column; gap: 4px; }
 .ct-item {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
