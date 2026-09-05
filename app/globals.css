@@ -1,47 +1,53 @@
 /* ============================================================================
-   Tokens de tema — identidade "Embarque" (direção 2, escolhida em 18/08/2026).
+   Tokens de tema — IDENTIDADE OFICIAL AmericaSim (05/09/2026).
+   Navy #001B54 (confiança) + Crimson #F80838 (inovação/CTA), cores MEDIDAS dos
+   logos oficiais (pasta IDENTIDADE VISUAL). Light mode é o padrão corporativo;
+   o dark "Noite" é a variante high-ticket da Estratégia de Identidade
+   (abr/2026) — respeita o modo do aparelho do visitante.
    NENHUMA cor fixa nos componentes: tudo sai daqui. Trocar de direção visual
    é trocar este bloco, não reescrever telas.
+   Substitui a direção provisória "Embarque" (18/08), agora obsoleta.
    ========================================================================= */
 :root {
-  --fundo: #12141a;
-  --superficie: #1b1f27;
-  --superficie-2: #232833;
-  --borda: #2f3644;
-  --texto: #ffffff;
-  --texto-fraco: #9aa3af;
-  --marca: #ff5a1f;
-  --marca-forte: #ff7442;
-  --marca-contraste: #12141a;
-  --realce: #ffb703;
-  --ok: #00b37e;
-  --alerta: #ffb703;
-  --erro: #ff6b6b;
-  --sombra: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.35);
+  --fundo: #f7f8fc;
+  --superficie: #ffffff;
+  --superficie-2: #eef1f9;
+  --borda: #e2e6f0;
+  --texto: #1a2233;
+  --texto-fraco: #59627a;
+  --marca: #f80838;
+  --marca-forte: #c7062c;
+  --marca-contraste: #ffffff;
+  --realce: #001b54;
+  --ok: #0e8a4d;
+  --alerta: #b97a00;
+  --erro: #c7062c;
+  --sombra: 0 1px 2px rgba(0, 27, 84, 0.06), 0 8px 24px rgba(0, 27, 84, 0.08);
   --raio: 14px;
-  --fonte-titulo: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --fonte-texto: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fonte-titulo: "Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fonte-texto: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --fonte-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* A direção Embarque nasceu escura. No claro vira preto sobre branco com o mesmo
-   laranja — mas o laranja sobre branco tem contraste fraco para texto corrido,
-   então no claro ele só aparece em botão e detalhe. */
-@media (prefers-color-scheme: light) {
+/* Dark mode oficial "Noite": crimson sobre azul-noite profundo. No escuro o
+   hover do CTA CLAREIA (escurecer sumiria contra o fundo), e o realce vira
+   texto claro — navy escuro sobre noite desapareceria. */
+@media (prefers-color-scheme: dark) {
   :root {
-    --fundo: #ffffff;
-    --superficie: #ffffff;
-    --superficie-2: #f4f5f7;
-    --borda: #e2e5ea;
-    --texto: #12141a;
-    --texto-fraco: #5c6472;
-    --marca: #e14a12;
-    --marca-forte: #c33f0d;
+    --fundo: #0a1029;
+    --superficie: #111a38;
+    --superficie-2: #18234a;
+    --borda: #243259;
+    --texto: #edf1fb;
+    --texto-fraco: #8fa0c9;
+    --marca: #f80838;
+    --marca-forte: #ff3d64;
     --marca-contraste: #ffffff;
-    --realce: #b07800;
-    --ok: #007d59;
-    --erro: #c0392b;
-    --sombra: 0 1px 2px rgba(18, 20, 26, 0.06), 0 8px 24px rgba(18, 20, 26, 0.07);
+    --realce: #c9d2e8;
+    --ok: #2fbf7a;
+    --alerta: #f5b31e;
+    --erro: #ff6b81;
+    --sombra: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.35);
   }
 }
 
@@ -118,6 +124,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   margin: 18px 0 8px;
 }
 .chamada em { font-style: normal; color: var(--marca); }
+
+/* Wordmark no padrão do logo: prefixo navy (realce), "Sim" crimson (marca). */
+.marca .wm { font-weight: 800; }
+.marca .wm b { color: var(--realce); }
+.marca .wm i { color: var(--marca); font-style: normal; }
+
+.selos { display: flex; flex-wrap: wrap; gap: 6px 20px; list-style: none; margin: 0 0 22px; padding: 0; font-size: 0.88rem; font-weight: 500; }
+.selos li::before { content: "✓"; color: var(--ok); font-weight: 800; margin-right: 7px; }
 
 .sub { color: var(--texto-fraco); margin: 0 0 26px; font-size: 1.02rem; }
 
@@ -197,6 +211,19 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   background: var(--marca); color: var(--marca-contraste); font-weight: 700; text-decoration: none;
 }
 .botao.secundario { background: var(--superficie-2); color: var(--texto); border: 1px solid var(--borda); }
+
+.passos3 { margin-top: 44px; }
+.passos3 h2, .faq h2 { font-size: 1.15rem; text-transform: uppercase; margin: 0 0 14px; }
+.passos3-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; counter-reset: p3; }
+.passo3 { background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); padding: 18px 20px; box-shadow: var(--sombra); }
+.passo3::before { counter-increment: p3; content: "0" counter(p3); font-family: var(--fonte-titulo); font-weight: 800; font-size: 1.3rem; color: var(--marca); display: block; }
+.passo3 h3 { font-size: 0.98rem; margin: 6px 0 4px; }
+.passo3 p { margin: 0; color: var(--texto-fraco); font-size: 0.88rem; }
+
+.faq { margin-top: 44px; }
+.faq details { background: var(--superficie); border: 1px solid var(--borda); border-radius: 12px; padding: 12px 16px; margin-bottom: 8px; }
+.faq summary { font-weight: 600; cursor: pointer; }
+.faq details p { margin: 8px 0 0; color: var(--texto-fraco); font-size: 0.92rem; }
 
 .rodape { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--borda); color: var(--texto-fraco); font-size: 0.78rem; }
 

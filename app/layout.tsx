@@ -25,6 +25,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="pt-BR" data-marca={m.codigo}>
       <head>
+        {/* Fontes da identidade oficial (05/09): Poppins (titulos) + Public
+            Sans (texto). Por <link>, e nao next/font: o build no VPS nao passa
+            a depender de rede, e o fallback do sistema segura a pagina se o
+            CDN falhar no cliente. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap"
+        />
         {/* O conteudo vem de lib/marcas.ts, que e uma constante do proprio
             codigo — nada aqui vem de requisicao, cabecalho ou banco. */}
         {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}

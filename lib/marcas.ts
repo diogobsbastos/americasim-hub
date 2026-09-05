@@ -28,9 +28,10 @@ export interface Marca {
 export const MARCA_PADRAO: Marca = {
   codigo: "americasim",
   nome: "AmericaSim",
-  // Direção 2 "Embarque" (IDENTIDADE_VISUAL_AMERICASIM.html), escolhida em 18/08.
-  // A aposta dela: a compra é por impulso, nas vésperas da viagem. Ganha quem
-  // for mais rápido e mais óbvio. Os tokens já são o padrão do globals.css.
+  // IDENTIDADE OFICIAL (05/09): Navy #001B54 + Crimson #F80838, cores medidas
+  // dos logos da pasta IDENTIDADE VISUAL — substitui a direção provisória
+  // "Embarque" de 18/08. A aposta de tom continua: compra por impulso, nas
+  // vésperas da viagem. Os tokens oficiais são o padrão do globals.css.
   chamada: "Pousou. Conectou.",
   rotuloBotao: "Quero agora",
   tokens: {},

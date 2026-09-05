@@ -84,11 +84,28 @@ export default async function Loja() {
   return (
     <main className="wrap">
       <header className="topo">
-        <div className="marca">
+        {/* Wordmark no padrão do logo oficial: prefixo em navy, "Sim" em
+            crimson — o mesmo gatilho visual do logo (ondas + SIM vermelhos). */}
+        <div className="marca" aria-label={marca.nome}>
           <span className="ponto" aria-hidden="true" />
-          {marca.nome}
+          <span className="wm">
+            {marca.nome.endsWith("Sim") ? (
+              <>
+                <b>{marca.nome.slice(0, -3)}</b>
+                <i>Sim</i>
+              </>
+            ) : (
+              marca.nome
+            )}
+          </span>
         </div>
         <p className="chamada">{marca.chamada}</p>
+        <ul className="selos" aria-label="por que comprar aqui">
+          <li>QR por e-mail na hora</li>
+          <li>Ativa só quando você chega</li>
+          <li>Seu WhatsApp continua o mesmo</li>
+          <li>Suporte em português</li>
+        </ul>
       </header>
 
       {modoPg === "demonstracao" ? (
@@ -155,6 +172,49 @@ export default async function Loja() {
           </div>
         </section>
       ))}
+
+      <section className="passos3" aria-label="como funciona">
+        <h2>Conectado em 3 passos</h2>
+        <div className="passos3-grade">
+          <div className="passo3">
+            <h3>Escolha o plano</h3>
+            <p>Pague on-line e receba o QR no seu e-mail na hora.</p>
+          </div>
+          <div className="passo3">
+            <h3>Instale antes de viajar</h3>
+            <p>Dois minutos, com Wi-Fi e calma. Nada é cobrado a mais por isso.</p>
+          </div>
+          <div className="passo3">
+            <h3>Ative ao pousar</h3>
+            <p>Ligou o eSIM, conectou na melhor rede local do destino.</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="faq" aria-label="perguntas frequentes">
+        <h2>Perguntas frequentes</h2>
+        <details>
+          <summary>Meu celular aceita eSIM?</summary>
+          <p>
+            A maioria dos aparelhos lançados de 2019 em diante aceita. Na dúvida, fale com a
+            gente antes de comprar — aparelho incompatível tem reembolso.
+          </p>
+        </details>
+        <details>
+          <summary>Quando o plano começa a contar?</summary>
+          <p>
+            Só quando você ativa o eSIM no destino. Pode comprar e instalar com antecedência,
+            sem gastar nenhum dia de validade.
+          </p>
+        </details>
+        <details>
+          <summary>Continuo recebendo WhatsApp no meu número?</summary>
+          <p>
+            Sim. O eSIM cuida só da internet; seu número e seus aplicativos continuam
+            exatamente como estão.
+          </p>
+        </details>
+      </section>
 
       <footer className="rodape">
         {marca.nome} · uma marca AmericaSim · vitrine consumindo{" "}
