@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { marcaAtual } from "../../lib/marcas";
-import Logotipo from "../Logotipo";
+import CabLoja from "../CabLoja";
 import Rodape from "../Rodape";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +17,7 @@ export default async function Termos() {
   const marca = await marcaAtual();
   return (
     <main className="wrap">
-      <header className="cab">
-        <Link href="/" aria-label="Voltar para a loja" style={{ display: "inline-flex" }}>
-          <Logotipo codigo={marca.codigo} nome={marca.nome} />
-        </Link>
-      </header>
+      <CabLoja codigo={marca.codigo} nome={marca.nome} />
 
       <article className="legal">
         <h1>Termos de uso</h1>

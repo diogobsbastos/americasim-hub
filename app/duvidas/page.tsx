@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { marcaAtual } from "../../lib/marcas";
-import Logotipo from "../Logotipo";
+import CabLoja from "../CabLoja";
 import Rodape from "../Rodape";
 import { IcoAviao, IcoCadeado, IcoCelular, IcoFerramenta, IcoIlimitado, IcoLivro, IcoQr, IcoRede } from "../Icones";
 
@@ -256,19 +256,7 @@ export default async function Duvidas() {
 
   return (
     <main className="wrap">
-      <header className="cab">
-        <Link href="/" aria-label="Voltar para a loja" style={{ display: "inline-flex" }}>
-          <Logotipo codigo={marca.codigo} nome={marca.nome} />
-        </Link>
-        <nav className="cab-links" aria-label="menu principal">
-          <Link href="/#planos">Planos</Link>
-          <Link href="/#como">Como funciona</Link>
-        </nav>
-        <div className="cab-conta">
-          <Link className="botao secundario" href="/conta/entrar">Entrar</Link>
-          <Link className="botao" href="/conta/criar">Criar conta</Link>
-        </div>
-      </header>
+      <CabLoja codigo={marca.codigo} nome={marca.nome} atual="duvidas" />
 
       <section className="topo-duvidas">
         <div className="beira">Central de dúvidas</div>

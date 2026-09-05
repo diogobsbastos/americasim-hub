@@ -2,7 +2,7 @@ import Link from "next/link";
 import { apiGet, chaveConfigurada, formatarDinheiro, modoPagamento } from "../lib/vitrine";
 import { marcaAtual } from "../lib/marcas";
 import FormCompra from "./FormCompra";
-import Logotipo from "./Logotipo";
+import CabLoja from "./CabLoja";
 import Rodape from "./Rodape";
 import { IcoAviao, IcoChat, IcoEscudo, IcoIlimitado, IcoQr, IcoRede } from "./Icones";
 
@@ -86,19 +86,8 @@ export default async function Loja() {
 
   return (
     <main className="wrap">
-      {/* ===== MENU DO TOPO: logo real + navegacao + conta ===== */}
-      <header className="cab">
-        <Logotipo codigo={marca.codigo} nome={marca.nome} />
-        <nav className="cab-links" aria-label="menu principal">
-          <a href="#planos">Planos</a>
-          <a href="#como">Como funciona</a>
-          <Link href="/duvidas">Dúvidas</Link>
-        </nav>
-        <div className="cab-conta">
-          <Link className="botao secundario" href="/conta/entrar">Entrar</Link>
-          <Link className="botao" href="/conta/criar">Criar conta</Link>
-        </div>
-      </header>
+      {/* ===== MENU DO TOPO: logo real + navegacao + conta (ciente da sessao) ===== */}
+      <CabLoja codigo={marca.codigo} nome={marca.nome} />
 
       {/* ===== HERO (estrutura do demo aprovado) ===== */}
       <section className="hero2">
