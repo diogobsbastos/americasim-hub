@@ -4,6 +4,7 @@ import { apiGet, chaveConfigurada, formatarDinheiro, modoPagamento } from "../li
 import { marcaAtual } from "../lib/marcas";
 import FormCompra from "./FormCompra";
 import Logotipo from "./Logotipo";
+import { IcoAviao, IcoChat, IcoEscudo, IcoIlimitado, IcoQr, IcoRede } from "./Icones";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +92,7 @@ export default async function Loja() {
         <nav className="cab-links" aria-label="menu principal">
           <a href="#planos">Planos</a>
           <a href="#como">Como funciona</a>
-          <a href="#duvidas">Dúvidas</a>
+          <Link href="/duvidas">Dúvidas</Link>
         </nav>
         <div className="cab-conta">
           <Link className="botao secundario" href="/conta/entrar">Entrar</Link>
@@ -203,10 +204,47 @@ export default async function Loja() {
 
       <div className="faixa-conf">
         <span>Garantia de reembolso</span>
-        <span>Pagamento seguro</span>
+        <span>Pagamento seguro via Stripe</span>
         <span>Rede de operadora local</span>
         <span>Suporte 24/7</span>
       </div>
+
+      {/* ===== POR QUE (grade ilustrada, estrutura de referencia) ===== */}
+      <section className="beneficios" aria-label="por que escolher">
+        <h2>Por que viajar com a {marca.nome}?</h2>
+        <div className="ben-grade">
+          <div className="ben">
+            <span className="ben-ico"><IcoIlimitado /></span>
+            <h3>Dados sem susto</h3>
+            <p>Plano fechado, pago em reais, antes de embarcar. A fatura da volta não tem surpresa.</p>
+          </div>
+          <div className="ben">
+            <span className="ben-ico"><IcoRede /></span>
+            <h3>Rede de operadora local</h3>
+            <p>Seu eSIM roda na mesma rede 5G/4G que o morador usa — não em sobra de banda.</p>
+          </div>
+          <div className="ben">
+            <span className="ben-ico"><IcoQr /></span>
+            <h3>QR na hora, por e-mail</h3>
+            <p>Pagou, chegou. Instala em dois minutos com o guia passo a passo por aparelho.</p>
+          </div>
+          <div className="ben">
+            <span className="ben-ico"><IcoAviao /></span>
+            <h3>Só conta quando você chega</h3>
+            <p>Instale com calma em casa: a validade começa na ativação, no destino.</p>
+          </div>
+          <div className="ben">
+            <span className="ben-ico"><IcoChat /></span>
+            <h3>Seu WhatsApp intacto</h3>
+            <p>Número, apps e contatos continuam os mesmos. Só a internet muda de país.</p>
+          </div>
+          <div className="ben">
+            <span className="ben-ico"><IcoEscudo /></span>
+            <h3>Garantia de verdade</h3>
+            <p>Aparelho incompatível, desistência ou falha nossa: reembolso sem novela.</p>
+          </div>
+        </div>
+      </section>
 
       {/* ===== COMO FUNCIONA ===== */}
       <section id="como" className="passos3" aria-label="como funciona">
@@ -277,6 +315,9 @@ export default async function Loja() {
             com o QR, o status e o guia de instalação.
           </p>
         </details>
+        <p style={{ marginTop: 12 }}>
+          <Link className="botao secundario" href="/duvidas">Ver todas as dúvidas →</Link>
+        </p>
       </section>
 
       <footer className="rodape">
