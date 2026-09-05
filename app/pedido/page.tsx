@@ -3,6 +3,7 @@ import { apiGet, chaveConfigurada } from "../../lib/vitrine";
 import { marcaAtual } from "../../lib/marcas";
 import CartaoEsim, { type AtivacaoTela } from "./CartaoEsim";
 import AtualizaSozinho from "./AtualizaSozinho";
+import Logotipo from "../Logotipo";
 
 export const dynamic = "force-dynamic";
 
@@ -88,13 +89,11 @@ export default async function Pedido({
   return (
     <main className="wrap">
       <header className="topo">
-        <div className="marca">
-          <span className="ponto" aria-hidden="true" />
-          {/* Quem comprou na ViagemSim nao pode cair numa tela escrita
-              AmericaSim: seria a primeira coisa a fazer o cliente achar que
-              caiu num golpe, justamente na pagina onde ele espera o produto. */}
-          {marca.nome}
-        </div>
+        {/* Quem comprou na ViagemSim nao pode cair numa tela escrita
+            AmericaSim: seria a primeira coisa a fazer o cliente achar que
+            caiu num golpe, justamente na pagina onde ele espera o produto.
+            O Logotipo ja resolve por marca. */}
+        <Logotipo codigo={marca.codigo} nome={marca.nome} />
       </header>
 
       <section className="produto">
@@ -131,6 +130,10 @@ export default async function Pedido({
         ) : esperandoInstalacao ? (
           <AtualizaSozinho aCadaMs={60_000} />
         ) : null}
+
+        <p style={{ marginTop: 22 }}>
+          <Link className="botao secundario" href="/#planos">Comprar outro eSIM</Link>
+        </p>
 
         <p className="nota">
           <Link href="/">Voltar para a loja</Link>

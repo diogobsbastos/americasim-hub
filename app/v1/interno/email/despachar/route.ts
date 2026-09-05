@@ -102,6 +102,14 @@ async function montarEntrega(pedidoId: string) {
     [pedidoId],
   );
 
+  // Paleta do padrao de e-mail oficial (05/09): cabecalho branco com wordmark
+  // + filete no acento, UM CTA, rodape escuro. Cores por marca — quem comprou
+  // na ViagemSim recebe e-mail da ViagemSim (paleta Passaporte).
+  const cores = marca === "ViagemSim"
+    ? { titulo: "#0f2a4a", acento: "#1e5aab", rodape: "#0f2a4a", sufixo: "Sim" }
+    : { titulo: "#001b54", acento: "#f80838", rodape: "#0a1029", sufixo: "Sim" };
+  const prefixo = marca.endsWith("Sim") ? marca.slice(0, -3) : marca;
+
   const anexos: AnexoEmail[] = [];
   const blocos: string[] = [];
   let i = 0;
@@ -114,23 +122,30 @@ async function montarEntrega(pedidoId: string) {
     anexos.push({ nome: `esim-${i}.png`, tipo: "image/png", base64: dataUrl.split(",")[1] ?? "" });
     const partes = lpa.split("$");
     blocos.push(
-      `<tr><td style="padding:12px 0;border-top:1px solid #e5e5e5">` +
-        `<p style=\"margin:0 0 6px;font-weight:bold\">eSIM ${i}${linha.iccid ? ` · chip …${String(linha.iccid).slice(-5)}` : ""}</p>` +
+      `<tr><td style="padding:14px 0;border-top:1px solid #e2e6f0">` +
+        `<p style=\"margin:0 0 6px;font-weight:bold;color:${cores.titulo}\">eSIM ${i}${linha.iccid ? ` · chip …${String(linha.iccid).slice(-5)}` : ""}</p>` +
         `<p style=\"margin:0 0 4px\">QR code: <b>anexo esim-${i}.png</b> (abra e escaneie)</p>` +
-        `<p style=\"margin:0;font-size:13px;color:#555\">Código manual — SM-DP+: <code>${partes[1] ?? ""}</code> · Ativação: <code>${partes[2] ?? ""}</code></p>` +
+        `<p style=\"margin:0;font-size:13px;color:#59627a\">Código manual — SM-DP+: <code>${partes[1] ?? ""}</code> · Ativação: <code>${partes[2] ?? ""}</code></p>` +
       `</td></tr>`,
     );
   }
   if (anexos.length === 0) throw new Error("pedido entregue sem codigo legivel para anexar");
 
   const html =
-    `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a">` +
-    `<h2 style="color:#0f2a4a">${marca}</h2>` +
-    `<p>Seu eSIM chegou! Pedido <b>${numero}</b>.</p>` +
-    `<table style="width:100%;border-collapse:collapse">${blocos.join("")}</table>` +
-    `<p style="margin:18px 0"><a href="${link}" style="background:#0f2a4a;color:#fff;padding:12px 22px;text-decoration:none;border-radius:6px;display:inline-block">Acompanhar pedido, status e QR</a></p>` +
-    `<p style="font-size:13px;color:#555">Instale com Wi-Fi e só ative quando chegar ao destino — o plano começa a contar na primeira conexão. Guarde este e-mail: o botão acima é o seu acesso ao pedido.</p>` +
-    `</div>`;
+    `<div style="background:#f7f8fc;padding:24px 12px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a2233">` +
+    `<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e6f0;border-radius:14px;overflow:hidden">` +
+      `<div style="padding:18px 26px;border-bottom:3px solid ${cores.acento};font-size:22px;font-weight:800;letter-spacing:-0.5px">` +
+        `<span style="color:${cores.titulo}">${prefixo}</span><span style="color:${cores.acento}">${cores.sufixo}</span>` +
+      `</div>` +
+      `<div style="padding:24px 26px;font-size:15px;line-height:1.6">` +
+        `<h1 style="margin:0 0 10px;font-size:20px;line-height:1.3;color:${cores.titulo}">Seu eSIM chegou 🎉</h1>` +
+        `<p style="margin:0 0 14px">Pedido <b>${numero}</b>. Instale agora mesmo, com Wi-Fi e calma — <b>o plano só começa a contar quando você chegar ao destino e ativar</b>.</p>` +
+        `<table style="width:100%;border-collapse:collapse">${blocos.join("")}</table>` +
+        `<p style="margin:20px 0 6px;text-align:center"><a href="${link}" style="background:${cores.acento};color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:12px;display:inline-block;font-weight:700">Abrir meu pedido: status, QR e guia de instalação</a></p>` +
+        `<p style="margin:14px 0 0;font-size:13px;color:#59627a">Guarde este e-mail: o botão acima é o seu acesso ao pedido. Não apague o eSIM depois de instalar — o QR é de uso único. Dúvida a qualquer hora? Responda este e-mail: gente de verdade, em português.</p>` +
+      `</div>` +
+      `<div style="background:${cores.rodape};color:#8fa0c9;padding:14px 26px;font-size:12px;line-height:1.6">${marca} · internet de viagem sem roaming e sem susto</div>` +
+    `</div></div>`;
 
   return { assunto: `Seu eSIM chegou — pedido ${numero} (${marca})`, html, deNome: marca, anexos };
 }

@@ -277,6 +277,17 @@ table.comp2 { width: 100%; border-collapse: collapse; background: var(--superfic
 .passo3 h3 { font-size: 0.98rem; margin: 6px 0 4px; }
 .passo3 p { margin: 0; color: var(--texto-fraco); font-size: 0.88rem; }
 
+/* Guia de ativacao (pagina do pedido) */
+.cod-copia { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.copiar { padding: 4px 10px; font-size: 0.72rem; font-weight: 700; border-radius: 8px; background: var(--superficie-2); color: var(--realce); border: 1px solid var(--borda); }
+.copiar:hover:not(:disabled) { background: var(--borda); }
+.guia { margin-top: 16px; border-top: 1px solid var(--borda); padding-top: 14px; }
+.guia-abas { display: flex; gap: 8px; margin-bottom: 10px; }
+.guia-abas button { padding: 8px 16px; font-size: 0.85rem; border-radius: 999px; background: var(--superficie-2); color: var(--texto-fraco); border: 1px solid var(--borda); }
+.guia-abas button:hover:not(:disabled) { background: var(--borda); }
+.guia-abas button[aria-selected="true"] { background: var(--realce); color: #ffffff; border-color: var(--realce); }
+.guia-passos { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 0.92rem; }
+
 .faq { margin-top: 44px; }
 .faq details { background: var(--superficie); border: 1px solid var(--borda); border-radius: 12px; padding: 12px 16px; margin-bottom: 8px; }
 .faq summary { font-weight: 600; cursor: pointer; }
