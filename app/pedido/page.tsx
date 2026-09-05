@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { apiGet, chaveConfigurada } from "../../lib/vitrine";
+import { cookies } from "next/headers";
+import { apiGet, apiPost, chaveConfigurada } from "../../lib/vitrine";
+import { COOKIE_SESSAO } from "../../lib/conta";
 import { marcaAtual } from "../../lib/marcas";
 import CartaoEsim, { type AtivacaoTela } from "./CartaoEsim";
 import AtualizaSozinho from "./AtualizaSozinho";
-import Logotipo from "../Logotipo";
-import Rodape from "../Rodape";
+import ShellCliente from "../ShellCliente";
 
 export const dynamic = "force-dynamic";
 
@@ -16,29 +17,9 @@ export async function generateMetadata() {
   };
 }
 
-// Cabecalho da pagina do pedido: mesmo padrao do site. Quem chega pelo LINK DO
-// E-MAIL pode nao estar logado — por isso ha "Meus eSIMs" (leva ao login se
-// preciso) e nada aqui depende de sessao.
-function Cabecalho({ codigo, nome }: { codigo: string; nome: string }) {
-  return (
-    <header className="cab">
-      <Link href="/" aria-label="Voltar para a loja" style={{ display: "inline-flex" }}>
-        {/* Quem comprou na ViagemSim nao pode cair numa tela escrita
-            AmericaSim: seria a primeira coisa a fazer o cliente achar que
-            caiu num golpe, justamente na pagina onde ele espera o produto.
-            O Logotipo ja resolve por marca. */}
-        <Logotipo codigo={codigo} nome={nome} />
-      </Link>
-      <nav className="cab-links" aria-label="menu principal">
-        <Link href="/#planos">Planos</Link>
-        <Link href="/duvidas">Dúvidas</Link>
-      </nav>
-      <div className="cab-conta">
-        <Link className="botao secundario" href="/conta">Meus eSIMs</Link>
-      </div>
-    </header>
-  );
-}
+// A pagina do pedido vive DENTRO do shell do painel (sidebar + topo), como
+// /conta — e o mesmo app, nao uma pagina solta. Quem chega pelo LINK DO E-MAIL
+// sem sessao ve o mesmo shell com "Entrar na conta" no lugar de "Sair".
 
 function chipDoPedido(p: any): { classe: string; texto: string } {
   if (p.entregue) return { classe: "ct-chip ok", texto: "entregue" };
@@ -72,10 +53,19 @@ export default async function Pedido({
     );
   }
 
+  // Sessao (se houver): decide Sair × Entrar na sidebar e o item Backend do
+  // admin. Nada AQUI depende dela — o acesso ao pedido e pelo link assinado.
+  const sessao = (await cookies()).get(COOKIE_SESSAO)?.value ?? "";
+  let temBackend = false;
+  if (sessao) {
+    const perfil = await apiPost("/v1/conta/perfil", { sessao });
+    temBackend = perfil.ok && perfil.dados?.backend === true;
+  }
+  const logado = Boolean(sessao);
+
   if (!numero || !token) {
     return (
-      <main className="wrap">
-        <Cabecalho codigo={marca.codigo} nome={marca.nome} />
+      <ShellCliente codigo={marca.codigo} nome={marca.nome} temBackend={temBackend} logado={logado} ativo="nenhum">
         <div className="aviso">
           <h1>Link incompleto</h1>
           <p>
@@ -84,8 +74,7 @@ export default async function Pedido({
             <Link href="/conta">Meus eSIMs</Link>.
           </p>
         </div>
-        <Rodape />
-      </main>
+      </ShellCliente>
     );
   }
 
@@ -97,8 +86,7 @@ export default async function Pedido({
   // proposito (SPEC/03). A vitrine repete a mesma mensagem para nao vazar a diferenca.
   if (!r.ok) {
     return (
-      <main className="wrap">
-        <Cabecalho codigo={marca.codigo} nome={marca.nome} />
+      <ShellCliente codigo={marca.codigo} nome={marca.nome} temBackend={temBackend} logado={logado} ativo="nenhum">
         <div className="aviso">
           <h1>Pedido não encontrado</h1>
           <p>Confira se o link está completo, incluindo o código depois de {"&t="}.</p>
@@ -106,8 +94,7 @@ export default async function Pedido({
             <Link href="/conta">Ver meus eSIMs</Link>
           </p>
         </div>
-        <Rodape />
-      </main>
+      </ShellCliente>
     );
   }
 
@@ -122,12 +109,14 @@ export default async function Pedido({
     p.entregue && ativacoes.some((a) => a.status !== "instalado" && a.status !== "falhou");
 
   return (
-    <main className="wrap">
-      <Cabecalho codigo={marca.codigo} nome={marca.nome} />
+    <ShellCliente codigo={marca.codigo} nome={marca.nome} temBackend={temBackend} logado={logado} ativo="esims">
+      <p className="ct-migalha">
+        <Link href="/conta">Meus eSIMs</Link> <span>/</span> Pedido {p.numero}
+      </p>
 
       <div className="ped-topo">
         <div>
-          <h1 className="ped-titulo">
+          <h1 className="ct-ola">
             {p.entregue ? <>Seu eSIM está pronto 🎉</> : <>Pedido recebido</>}
           </h1>
           <p className="ped-sub">
@@ -158,11 +147,8 @@ export default async function Pedido({
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 24 }}>
         <Link className="botao secundario" href="/conta">← Meus eSIMs</Link>
-        <Link className="botao secundario" href="/#planos">Comprar outro eSIM</Link>
         <Link className="botao secundario" href="/duvidas#instalar">Ajuda para instalar</Link>
       </div>
-
-      <Rodape />
-    </main>
+    </ShellCliente>
   );
 }

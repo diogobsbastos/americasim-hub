@@ -382,10 +382,14 @@ table.comp2 { width: 100%; border-collapse: collapse; background: var(--superfic
 .ct-filtro.ativo, .ct-filtro.ativo:hover:not(:disabled) { background: var(--realce); border-color: var(--realce); color: #ffffff; }
 .ct-filtro b { font-weight: 800; margin-left: 4px; opacity: 0.75; }
 
-/* Cabecalho da pagina do pedido */
+/* Cabecalho da pagina do pedido (dentro do shell) */
 .ped-topo { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: space-between; margin: 6px 0 18px; }
 .ped-titulo { font-family: var(--fonte-titulo); font-size: 1.6rem; margin: 0; }
 .ped-sub { margin: 2px 0 0; color: var(--texto-fraco); font-size: 0.9rem; }
+.ct-migalha { margin: 0 0 10px; font-size: 0.82rem; color: var(--texto-fraco); }
+.ct-migalha a { color: var(--texto-fraco); font-weight: 600; }
+.ct-migalha a:hover { color: var(--marca); }
+.ct-migalha span { margin: 0 6px; opacity: 0.6; }
 @media (max-width: 860px) {
   .ct-lado { display: none; }
   .ct-topo-logo { display: inline-flex; }

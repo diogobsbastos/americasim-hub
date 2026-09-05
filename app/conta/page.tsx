@@ -4,10 +4,9 @@ import { redirect } from "next/navigation";
 import { apiPost } from "../../lib/vitrine";
 import { COOKIE_SESSAO } from "../../lib/conta";
 import { marcaAtual } from "../../lib/marcas";
-import Logotipo from "../Logotipo";
-import { IcoCelular, IcoChat, IcoFerramenta, IcoIlimitado, IcoQr } from "../Icones";
+import ShellCliente from "../ShellCliente";
+import { IcoQr } from "../Icones";
 import FiltroEsims, { type PedidoLista } from "./FiltroEsims";
-import { sair } from "./acoes";
 
 export const dynamic = "force-dynamic";
 
@@ -17,62 +16,8 @@ export async function generateMetadata() {
 }
 
 // AREA DO CLIENTE no padrao de painel (referencia estrutural: painel do
-// QueroConsertar): sidebar fixa com menu, topo com a acao principal, saudacao,
-// e os pedidos numa GRADE de cartoes com botoes — nada de lista solta com
-// link sublinhado. O site inteiro fica amarrado: daqui se vai para a loja,
-// para as duvidas e (admin) para o backend.
-
-function Shell({
-  codigo,
-  nome,
-  temBackend,
-  children,
-}: {
-  codigo: string;
-  nome: string;
-  temBackend: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <main className="wrap ct-shell">
-      {/* SIDEBAR (some no celular; la o menu vive no topo) */}
-      <aside className="ct-lado" aria-label="menu da conta">
-        <Link href="/" aria-label="Voltar para a loja" className="ct-logo">
-          <Logotipo codigo={codigo} nome={nome} />
-        </Link>
-        <nav className="ct-nav">
-          <Link className="ct-item ativo" href="/conta"><IcoQr /> <span>Meus eSIMs</span></Link>
-          <Link className="ct-item" href="/#planos"><IcoIlimitado /> <span>Comprar eSIM</span></Link>
-          <Link className="ct-item" href="/duvidas"><IcoChat /> <span>Central de dúvidas</span></Link>
-          <Link className="ct-item" href="/duvidas#instalar"><IcoCelular /> <span>Como instalar</span></Link>
-          {temBackend ? (
-            <a className="ct-item" href="/painel"><IcoFerramenta /> <span>Backend</span></a>
-          ) : null}
-        </nav>
-        <form action={sair} className="ct-sair">
-          <button type="submit">⏻ <span>Sair</span></button>
-        </form>
-      </aside>
-
-      {/* COLUNA PRINCIPAL */}
-      <div className="ct-corpo">
-        <header className="ct-topo">
-          <Link href="/" aria-label="Voltar para a loja" className="ct-topo-logo">
-            <Logotipo codigo={codigo} nome={nome} />
-          </Link>
-          <div className="ct-topo-acoes">
-            {temBackend ? <a className="botao secundario ct-so-celular" href="/painel">Backend</a> : null}
-            <Link className="botao" href="/#planos">+ Novo eSIM</Link>
-            <form action={sair} className="ct-so-celular" style={{ display: "inline-flex" }}>
-              <button type="submit" className="botao secundario" style={{ border: "1px solid var(--borda)" }}>Sair</button>
-            </form>
-          </div>
-        </header>
-        <div className="ct-main">{children}</div>
-      </div>
-    </main>
-  );
-}
+// QueroConsertar). O shell (sidebar + topo) e COMPARTILHADO com /pedido:
+// app/ShellCliente.tsx.
 
 export default async function MeusPedidos() {
   const marca = await marcaAtual();
@@ -94,7 +39,7 @@ export default async function MeusPedidos() {
 
   if (!r.ok && r.erro_codigo === "conta_nao_verificada") {
     return (
-      <Shell codigo={marca.codigo} nome={marca.nome} temBackend={temBackend}>
+      <ShellCliente codigo={marca.codigo} nome={marca.nome} temBackend={temBackend} logado ativo="esims">
         <h1 className="ct-ola">Falta confirmar seu e-mail</h1>
         <p className="nota" style={{ maxWidth: "52ch" }}>
           Por segurança, os pedidos só aparecem depois que você confirmar que este e-mail é seu.
@@ -103,26 +48,26 @@ export default async function MeusPedidos() {
         <p style={{ marginTop: 16 }}>
           <a className="botao secundario" href="/conta/entrar">Entrar com o Google →</a>
         </p>
-      </Shell>
+      </ShellCliente>
     );
   }
 
   if (!r.ok) {
     return (
-      <Shell codigo={marca.codigo} nome={marca.nome} temBackend={temBackend}>
+      <ShellCliente codigo={marca.codigo} nome={marca.nome} temBackend={temBackend} logado ativo="esims">
         <h1 className="ct-ola">Não deu para carregar seus pedidos</h1>
         <p className="nota">{r.erro_mensagem}</p>
         <p style={{ marginTop: 16 }}>
           <a className="botao secundario" href="/conta">Tentar de novo</a>
         </p>
-      </Shell>
+      </ShellCliente>
     );
   }
 
   const pedidos: PedidoLista[] = r.dados?.pedidos ?? [];
 
   return (
-    <Shell codigo={marca.codigo} nome={marca.nome} temBackend={temBackend}>
+    <ShellCliente codigo={marca.codigo} nome={marca.nome} temBackend={temBackend} logado ativo="esims">
       <h1 className="ct-ola">Olá{ola ? `, ${ola}` : ""}! 👋</h1>
       {email ? <p className="ct-quem">{email}</p> : null}
 
@@ -138,6 +83,6 @@ export default async function MeusPedidos() {
       ) : (
         <FiltroEsims pedidos={pedidos} />
       )}
-    </Shell>
+    </ShellCliente>
   );
 }
