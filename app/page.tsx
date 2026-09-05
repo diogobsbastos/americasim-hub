@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import Link from "next/link";
 import { apiGet, chaveConfigurada, formatarDinheiro, modoPagamento } from "../lib/vitrine";
 import { marcaAtual } from "../lib/marcas";
+import { LOGO_AMERICASIM } from "../lib/logo-americasim";
 import FormCompra from "./FormCompra";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +46,29 @@ function textoEstoque(v: Variante): string {
   return q === 1 ? "1 disponivel agora" : `${q} disponiveis agora`;
 }
 
+// Logotipo por marca: AmericaSim tem o logo oficial (globo + wordmark);
+// as demais caem no wordmark de texto ate terem logo proprio.
+function Logotipo({ codigo, nome }: { codigo: string; nome: string }) {
+  if (codigo === "americasim") {
+    return <img className="logotipo" src={LOGO_AMERICASIM} alt="AmericaSim" />;
+  }
+  return (
+    <span className="marca" aria-label={nome}>
+      <span className="ponto" aria-hidden="true" />
+      <span className="wm">
+        {nome.endsWith("Sim") ? (
+          <>
+            <b>{nome.slice(0, -3)}</b>
+            <i>Sim</i>
+          </>
+        ) : (
+          nome
+        )}
+      </span>
+    </span>
+  );
+}
+
 export default async function Loja() {
   const marca = await marcaAtual();
 
@@ -83,30 +108,53 @@ export default async function Loja() {
 
   return (
     <main className="wrap">
-      <header className="topo">
-        {/* Wordmark no padrão do logo oficial: prefixo em navy, "Sim" em
-            crimson — o mesmo gatilho visual do logo (ondas + SIM vermelhos). */}
-        <div className="marca" aria-label={marca.nome}>
-          <span className="ponto" aria-hidden="true" />
-          <span className="wm">
-            {marca.nome.endsWith("Sim") ? (
-              <>
-                <b>{marca.nome.slice(0, -3)}</b>
-                <i>Sim</i>
-              </>
-            ) : (
-              marca.nome
-            )}
-          </span>
+      {/* ===== MENU DO TOPO: logo real + navegacao + conta ===== */}
+      <header className="cab">
+        <Logotipo codigo={marca.codigo} nome={marca.nome} />
+        <nav className="cab-links" aria-label="menu principal">
+          <a href="#planos">Planos</a>
+          <a href="#como">Como funciona</a>
+          <a href="#duvidas">Dúvidas</a>
+        </nav>
+        <div className="cab-conta">
+          <Link className="botao secundario" href="/conta/entrar">Entrar</Link>
+          <Link className="botao" href="/conta/criar">Criar conta</Link>
         </div>
-        <p className="chamada">{marca.chamada}</p>
-        <ul className="selos" aria-label="por que comprar aqui">
-          <li>QR por e-mail na hora</li>
-          <li>Ativa só quando você chega</li>
-          <li>Seu WhatsApp continua o mesmo</li>
-          <li>Suporte em português</li>
-        </ul>
       </header>
+
+      {/* ===== HERO (estrutura do demo aprovado) ===== */}
+      <section className="hero2">
+        <div>
+          <div className="beira">eSIM de viagem · chip digital</div>
+          <p className="chamada">
+            {marca.codigo === "americasim" ? (
+              <>Pousou. <em>Conectou.</em></>
+            ) : (
+              marca.chamada
+            )}
+          </p>
+          <p className="sub2">
+            Internet de viagem comprada antes de embarcar e ativada quando o avião toca o
+            chão. Sem roaming, sem surpresa na fatura, sem trocar seu chip.
+          </p>
+          <ul className="selos" aria-label="por que comprar aqui">
+            <li>QR por e-mail na hora</li>
+            <li>Ativa só quando você chega</li>
+            <li>Seu WhatsApp continua o mesmo</li>
+            <li>Suporte em português</li>
+          </ul>
+          <a className="botao btn-hero" href="#planos">Ver planos →</a>
+        </div>
+        <div className="hero-cartao">
+          <h3>Por que {marca.nome}?</h3>
+          <ul>
+            <li>Rede 5G/4G de operadora local — a mesma que o morador usa</li>
+            <li>Instale antes de viajar, com Wi-Fi e calma</li>
+            <li>O plano só começa a contar na ativação, no destino</li>
+            <li>Aparelho incompatível tem reembolso</li>
+          </ul>
+        </div>
+      </section>
 
       {modoPg === "demonstracao" ? (
         <p className="faixa">
@@ -130,50 +178,61 @@ export default async function Loja() {
         </div>
       ) : null}
 
-      {produtos.map((p) => (
-        <section key={p.handle} className="produto">
-          <h1>{p.nome}</h1>
-          {p.descricao ? <p className="sub">{p.descricao}</p> : null}
+      {/* ===== PLANOS (produtos reais do banco) ===== */}
+      <div id="planos">
+        {produtos.map((p) => (
+          <section key={p.handle} className="produto">
+            <h1>{p.nome}</h1>
+            {p.descricao ? <p className="sub">{p.descricao}</p> : null}
 
-          <div className="grade">
-            {p.variantes.map((v) => (
-              <article key={v.sku} className={v.destaque ? "plano destaque" : "plano"}>
-                {v.destaque ? <span className="selo">Mais escolhido</span> : null}
+            <div className="grade">
+              {p.variantes.map((v) => (
+                <article key={v.sku} className={v.destaque ? "plano destaque" : "plano"}>
+                  {v.destaque ? <span className="selo">Mais escolhido</span> : null}
 
-                <div className="volume">
-                  {v.atributos?.gb ? <strong>{v.atributos.gb} GB</strong> : <strong>{v.sku}</strong>}
-                  {v.atributos?.dias ? <span> · {v.atributos.dias} dias</span> : null}
-                </div>
+                  <div className="volume">
+                    {v.atributos?.gb ? <strong>{v.atributos.gb} GB</strong> : <strong>{v.sku}</strong>}
+                    {v.atributos?.dias ? <span> · {v.atributos.dias} dias</span> : null}
+                  </div>
 
-                {v.atributos?.cobertura ? (
-                  <p className="cobertura">{bandeiras(v.atributos.cobertura)}</p>
-                ) : null}
+                  {v.atributos?.cobertura ? (
+                    <p className="cobertura">{bandeiras(v.atributos.cobertura)}</p>
+                  ) : null}
 
-                <p className="preco">{formatarDinheiro(v.preco, v.moeda)}</p>
+                  <p className="preco">{formatarDinheiro(v.preco, v.moeda)}</p>
 
-                <p className={v.disponivel ? "estoque sim" : "estoque nao"}>
-                  {textoEstoque(v)}
-                </p>
+                  <p className={v.disponivel ? "estoque sim" : "estoque nao"}>
+                    {textoEstoque(v)}
+                  </p>
 
-                {/* O rotulo do botao vem da MARCA: a AmericaSim vende impulso
-                    ("Quero agora"), a ViagemSim vende garantia ("Garantir meu
-                    eSIM"). E a diferenca de tom que faz duas vitrines serem
-                    duas apostas, e nao o mesmo site pintado de outra cor. */}
-                <FormCompra
-                  sku={v.sku}
-                  tentativa={randomUUID()}
-                  disponivel={v.disponivel}
-                  rotulo={marca.rotuloBotao}
-                />
+                  {/* O rotulo do botao vem da MARCA: a AmericaSim vende impulso
+                      ("Quero agora"), a ViagemSim vende garantia ("Garantir meu
+                      eSIM"). E a diferenca de tom que faz duas vitrines serem
+                      duas apostas, e nao o mesmo site pintado de outra cor. */}
+                  <FormCompra
+                    sku={v.sku}
+                    tentativa={randomUUID()}
+                    disponivel={v.disponivel}
+                    rotulo={marca.rotuloBotao}
+                  />
 
-                <p className="sku">{v.sku}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-      ))}
+                  <p className="sku">{v.sku}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
 
-      <section className="passos3" aria-label="como funciona">
+      <div className="faixa-conf">
+        <span>Garantia de reembolso</span>
+        <span>Pagamento seguro</span>
+        <span>Rede de operadora local</span>
+        <span>Suporte 24/7</span>
+      </div>
+
+      {/* ===== COMO FUNCIONA ===== */}
+      <section id="como" className="passos3" aria-label="como funciona">
         <h2>Conectado em 3 passos</h2>
         <div className="passos3-grade">
           <div className="passo3">
@@ -191,7 +250,27 @@ export default async function Loja() {
         </div>
       </section>
 
-      <section className="faq" aria-label="perguntas frequentes">
+      {/* ===== COMPARATIVO (estrutura do demo) ===== */}
+      <section className="comparativo" aria-label="comparativo com roaming">
+        <h2>{marca.nome} × roaming da sua operadora</h2>
+        <div className="rolagem">
+          <table className="comp2">
+            <thead>
+              <tr><th></th><th>{marca.nome}</th><th>Roaming tradicional</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Preço fechado antes de viajar</td><td className="sim">Sim</td><td className="nao">Não</td></tr>
+              <tr><td>Velocidade de rede local</td><td className="sim">5G/4G plena</td><td className="nao">Reduzida</td></tr>
+              <tr><td>Surpresa na fatura</td><td className="sim">Nunca</td><td className="nao">Frequente</td></tr>
+              <tr><td>Trocar chip físico</td><td className="sim">Não precisa</td><td className="sim">Não precisa</td></tr>
+              <tr><td>Suporte em português 24/7</td><td className="sim">Sim</td><td className="nao">Depende do plano</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ===== FAQ ===== */}
+      <section id="duvidas" className="faq" aria-label="perguntas frequentes">
         <h2>Perguntas frequentes</h2>
         <details>
           <summary>Meu celular aceita eSIM?</summary>
@@ -214,11 +293,20 @@ export default async function Loja() {
             exatamente como estão.
           </p>
         </details>
+        <details>
+          <summary>Onde vejo meu eSIM depois de comprar?</summary>
+          <p>
+            No e-mail que chega na hora da compra e em <Link href="/conta">Minha conta</Link>,
+            com o QR, o status e o guia de instalação.
+          </p>
+        </details>
       </section>
 
       <footer className="rodape">
-        {marca.nome} · uma marca AmericaSim · vitrine consumindo{" "}
-        <code>GET /v1/catalogo</code> e <code>POST /v1/checkout</code>
+        <p style={{ margin: 0 }}>
+          <b>{marca.nome}</b> · internet de viagem sem roaming e sem susto · atendimento
+          24/7 em português
+        </p>
       </footer>
     </main>
   );

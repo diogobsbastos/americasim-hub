@@ -135,6 +135,39 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .wrap { max-width: 1000px; margin: 0 auto; padding: 32px 20px 64px; }
 .topo { padding: 8px 0 24px; }
 
+/* Menu do topo (template 05/09): logo real + navegacao + Entrar/Criar conta. */
+.cab { display: flex; align-items: center; gap: 20px; padding: 4px 0 18px; flex-wrap: wrap; }
+.logotipo { height: 40px; width: auto; display: block; }
+.cab-links { display: flex; gap: 18px; font-size: 0.92rem; font-weight: 600; margin-left: auto; }
+.cab-links a { color: var(--texto); text-decoration: none; }
+.cab-links a:hover { color: var(--realce); }
+.cab-conta { display: flex; gap: 10px; }
+.cab-conta .botao { padding: 9px 16px; font-size: 0.88rem; }
+@media (max-width: 720px) { .cab-links { display: none; } .cab-conta { margin-left: auto; } }
+
+/* Hero em duas colunas (texto + cartao de valor), como no demo aprovado. */
+.hero2 { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 36px; align-items: center; padding: 18px 0 34px; }
+@media (max-width: 860px) { .hero2 { grid-template-columns: 1fr; } }
+.beira { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--texto-fraco); }
+.sub2 { color: var(--texto-fraco); font-size: 1.05rem; max-width: 52ch; margin: 0 0 16px; }
+.btn-hero { font-size: 1.02rem; padding: 14px 26px; border-radius: var(--raio); }
+.hero-cartao { background: var(--superficie); border: 1px solid var(--borda); border-radius: 18px; padding: 24px; box-shadow: var(--sombra); }
+.hero-cartao h3 { margin: 0 0 12px; font-size: 1rem; }
+.hero-cartao ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 0.92rem; }
+.hero-cartao li::before { content: "✓"; color: var(--ok); font-weight: 800; margin-right: 8px; }
+
+.faixa-conf { display: flex; flex-wrap: wrap; gap: 10px 26px; justify-content: center; background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); padding: 14px 20px; margin: 36px 0 0; font-size: 0.88rem; font-weight: 600; color: var(--realce); }
+.faixa-conf span::before { content: "●"; color: var(--marca); font-size: 0.6rem; vertical-align: middle; margin-right: 8px; }
+
+.comparativo { margin-top: 44px; }
+.comparativo h2 { font-size: 1.15rem; text-transform: uppercase; margin: 0 0 14px; }
+.rolagem { overflow-x: auto; }
+table.comp2 { width: 100%; border-collapse: collapse; background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); overflow: hidden; font-size: 0.92rem; }
+.comp2 th, .comp2 td { padding: 12px 16px; border-top: 1px solid var(--borda); text-align: left; }
+.comp2 thead th { background: var(--realce); color: #ffffff; border: 0; font-family: var(--fonte-titulo); }
+.comp2 td.sim { color: var(--ok); font-weight: 700; }
+.comp2 td.nao { color: var(--erro); font-weight: 700; }
+
 .marca { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.05rem; }
 .ponto { width: 22px; height: 22px; border-radius: 7px; background: var(--marca); display: inline-block; }
 
