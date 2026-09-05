@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { apiPost } from "../../lib/vitrine";
 import { COOKIE_SESSAO } from "../../lib/conta";
 import { marcaAtual } from "../../lib/marcas";
+import Logotipo from "../Logotipo";
+import Rodape from "../Rodape";
 import { sair } from "./acoes";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,43 @@ interface PedidoLista {
   t: string;
 }
 
+// Cabecalho da area logada: logo real + acoes da conta. O botao "Abrir o
+// backend" fica AQUI, no topo — e o atalho do admin, nao um rodape de lista.
+function Cabecalho({
+  codigo,
+  nome,
+  temBackend,
+}: {
+  codigo: string;
+  nome: string;
+  temBackend: boolean;
+}) {
+  return (
+    <header className="cab">
+      <Link href="/" aria-label="Voltar para a loja" style={{ display: "inline-flex" }}>
+        <Logotipo codigo={codigo} nome={nome} />
+      </Link>
+      <nav className="cab-links" aria-label="menu principal">
+        <Link href="/#planos">Planos</Link>
+        <Link href="/duvidas">Dúvidas</Link>
+      </nav>
+      <div className="cab-conta">
+        {temBackend ? (
+          /* <a>, nao <Link>: /painel confere a sessao no servidor e a navegacao
+             de app do Next atrapalharia o redirect para /entrar quando ela
+             tiver expirado. */
+          <a className="botao" href="/painel">Abrir o backend →</a>
+        ) : null}
+        <form action={sair} style={{ display: "inline-flex" }}>
+          <button type="submit" className="botao secundario" style={{ border: "1px solid var(--borda)" }}>
+            Sair
+          </button>
+        </form>
+      </div>
+    </header>
+  );
+}
+
 export default async function MeusPedidos() {
   const marca = await marcaAtual();
   const c = await cookies();
@@ -33,10 +72,11 @@ export default async function MeusPedidos() {
   if (!r.ok && r.erro_codigo === "sessao_invalida") redirect("/conta/entrar");
 
   // Admin logado (e-mail que tambem e usuario ativo do painel) ganha o atalho
-  // "Abrir o backend". So o BOTAO depende disto — a porta do painel confere a
-  // propria sessao (cookie painel_sessao, criado no login com Google).
+  // "Abrir o backend" no cabecalho. So o BOTAO depende disto — a porta do
+  // painel confere a propria sessao (cookie painel_sessao, do login Google).
   const perfil = await apiPost("/v1/conta/perfil", { sessao });
   const temBackend = perfil.ok && perfil.dados?.backend === true;
+  const email = String(perfil.dados?.email ?? r.dados?.email ?? "");
 
   // Conta criada com senha e ainda sem e-mail confirmado: nada de pedidos.
   // E a trava anti-espiao (alguem criando conta com e-mail alheio) — a tela
@@ -44,19 +84,15 @@ export default async function MeusPedidos() {
   if (!r.ok && r.erro_codigo === "conta_nao_verificada") {
     return (
       <main className="wrap">
-        <header className="topo">
-          <div className="marca"><span className="ponto" aria-hidden="true" />{marca.nome}</div>
-        </header>
+        <Cabecalho codigo={marca.codigo} nome={marca.nome} temBackend={temBackend} />
         <section className="produto">
           <h1>Falta confirmar seu e-mail</h1>
           <p className="nota">
             Por seguranca, os pedidos so aparecem depois que voce confirmar que este e-mail e seu.
             O e-mail de confirmacao chega em breve — ou entre com o Google, que confirma na hora.
           </p>
-          <form action={sair}>
-            <button type="submit" className="secundario">Sair</button>
-          </form>
         </section>
+        <Rodape />
       </main>
     );
   }
@@ -64,11 +100,13 @@ export default async function MeusPedidos() {
   if (!r.ok) {
     return (
       <main className="wrap">
+        <Cabecalho codigo={marca.codigo} nome={marca.nome} temBackend={temBackend} />
         <div className="aviso">
           <h1>Nao deu para carregar seus pedidos</h1>
           <p>{r.erro_mensagem}</p>
           <p><Link href="/conta/entrar">Tentar entrar de novo</Link></p>
         </div>
+        <Rodape />
       </main>
     );
   }
@@ -77,24 +115,22 @@ export default async function MeusPedidos() {
 
   return (
     <main className="wrap">
-      <header className="topo">
-        <div className="marca"><span className="ponto" aria-hidden="true" />{marca.nome}</div>
-      </header>
+      <Cabecalho codigo={marca.codigo} nome={marca.nome} temBackend={temBackend} />
 
       <section className="produto">
         <h1>Meus pedidos</h1>
-        <p className="nota">{String(r.dados?.email ?? "")}</p>
+        {email ? <p className="nota" style={{ marginTop: 4 }}>{email}</p> : null}
 
         {pedidos.length === 0 ? (
           <p className="nota">
-            Nenhum pedido neste e-mail ainda. <Link href="/">Ir para a loja</Link>
+            Nenhum pedido neste e-mail ainda. <Link href="/#planos">Escolher um plano →</Link>
           </p>
         ) : (
           pedidos.map((p) => (
-            <div key={p.numero} style={{ border: "1px solid var(--borda)", borderRadius: 12, padding: "14px 16px", marginTop: 12 }}>
+            <div key={p.numero} className="pedido-cartao">
               <div className="linha">
                 <span>Pedido <code>{p.numero}</code></span>
-                <span style={{ color: p.entregue ? "var(--ok)" : "var(--texto-fraco)", fontWeight: 700 }}>
+                <span className={`pedido-status ${p.entregue ? "ok" : p.status === "cancelado" ? "off" : ""}`}>
                   {p.entregue ? "entregue" : p.status}
                 </span>
               </div>
@@ -111,19 +147,12 @@ export default async function MeusPedidos() {
           ))
         )}
 
-        <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
-          {temBackend ? (
-            /* <a>, nao <Link>: /painel confere a sessao no servidor e navegacao
-               de app do Next atrapalharia o redirect para /entrar quando ela
-               tiver expirado. */
-            <a className="botao" href="/painel">Abrir o backend →</a>
-          ) : null}
-          <form action={sair}>
-            <button type="submit" className="secundario">Sair</button>
-          </form>
-          <p className="nota" style={{ margin: 0 }}><Link href="/">Voltar para a loja</Link></p>
-        </div>
+        <p className="nota" style={{ marginTop: 20 }}>
+          <Link className="botao secundario" href="/#planos">Comprar outro eSIM</Link>
+        </p>
       </section>
+
+      <Rodape />
     </main>
   );
 }

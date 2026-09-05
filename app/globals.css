@@ -285,6 +285,15 @@ table.comp2 { width: 100%; border-collapse: collapse; background: var(--superfic
 .aviso h1 { margin: 0 0 8px; font-size: 1.3rem; }
 
 .pedido-meta { margin: 16px 0 24px; }
+
+/* Cartao de pedido em "Meus pedidos" */
+.pedido-cartao {
+  background: var(--superficie); border: 1px solid var(--borda);
+  border-radius: 12px; padding: 14px 16px; margin-top: 12px; box-shadow: var(--sombra);
+}
+.pedido-status { font-weight: 700; color: var(--texto); }
+.pedido-status.ok { color: var(--ok); }
+.pedido-status.off { color: var(--texto-fraco); font-weight: 600; }
 .linha {
   display: flex; justify-content: space-between; align-items: center;
   gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--borda);
