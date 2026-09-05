@@ -51,6 +51,29 @@
   }
 }
 
+/* A LOJA (e as paginas do cliente: conta, pedido) tem UMA cara — a clara, do
+   demo aprovado em 05/09. A vitrine nao muda com o modo do aparelho do
+   visitante; quem segue o sistema e so o PAINEL (que nao usa main.wrap).
+   Escopado na marca AmericaSim para NAO engolir a paleta propria da ViagemSim
+   (mesma especificidade venceria pela ordem, que nao controlamos). */
+html[data-marca="americasim"]:has(main.wrap) {
+  color-scheme: light;
+  --fundo: #f7f8fc;
+  --superficie: #ffffff;
+  --superficie-2: #eef1f9;
+  --borda: #e2e6f0;
+  --texto: #1a2233;
+  --texto-fraco: #59627a;
+  --marca: #f80838;
+  --marca-forte: #c7062c;
+  --marca-contraste: #ffffff;
+  --realce: #001b54;
+  --ok: #0e8a4d;
+  --alerta: #b97a00;
+  --erro: #c7062c;
+  --sombra: 0 1px 2px rgba(0, 27, 84, 0.06), 0 8px 24px rgba(0, 27, 84, 0.08);
+}
+
 * { box-sizing: border-box; }
 
 html, body {
