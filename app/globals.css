@@ -311,6 +311,14 @@ table.comp2 { width: 100%; border-collapse: collapse; background: var(--superfic
 .separa { display: flex; align-items: center; gap: 12px; color: var(--texto-fraco); font-size: 0.82rem; margin: 14px 0 10px; }
 .separa::before, .separa::after { content: ""; flex: 1; border-top: 1px solid var(--borda); }
 .caixa-pe { text-align: center; margin-top: 18px; }
+.caixa-pe a { color: var(--texto-fraco); font-weight: 500; }
+.caixa-alt { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 18px; font-size: 0.88rem; color: var(--texto-fraco); }
+.botao.contorno { background: transparent; color: var(--realce); border: 1.5px solid var(--borda); padding: 8px 16px; font-size: 0.85rem; }
+.botao.contorno:hover { border-color: var(--realce); }
+/* Botao do Google no padrao de marca deles: branco, borda #dadce0, G colorido. */
+.btn-google { display: flex; align-items: center; justify-content: center; gap: 10px; background: #ffffff; color: #3c4043; border: 1px solid #dadce0; border-radius: 10px; padding: 12px 16px; font-weight: 600; font-size: 0.95rem; text-decoration: none; }
+.btn-google:hover { background: #f8f9fa; border-color: #c6cacf; }
+.btn-google:focus-visible { outline: 2px solid #4285f4; outline-offset: 2px; }
 .entrar-caixa h1 { font-size: 1.35rem; margin: 0 0 4px; }
 .entrar-caixa .sub { font-size: 0.9rem; margin-bottom: 22px; }
 .entrar-caixa form { display: flex; flex-direction: column; gap: 14px; }
