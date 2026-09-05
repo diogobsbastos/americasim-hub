@@ -2,7 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { apiPost, basePublica } from "../../../../lib/vitrine";
 import { COOKIE_SESSAO, DIAS_SESSAO, voltarValido } from "../../../../lib/conta";
 import { configGoogle } from "../../../../lib/google";
-import { HORAS_SESSAO_PAINEL } from "../../../../lib/painel/sessao";
+import { db } from "../../../../lib/db";
+import { HORAS_SESSAO_PAINEL, auditar, novaSessaoToken } from "../../../../lib/painel/sessao";
 
 export const dynamic = "force-dynamic";
 
@@ -111,16 +112,39 @@ export async function GET(req: Request) {
   h.append("Set-Cookie", "g_state=; Path=/conta/google; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
   h.append("Set-Cookie", "g_voltar=; Path=/conta/google; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
 
-  // SSO do backoffice: quando a API reconheceu o e-mail como usuario ATIVO do
-  // painel, ela devolve tambem o token da sessao do painel — e o cookie e
-  // gravado AQUI, porque e esta resposta que chega ao navegador. Path=/painel:
-  // o resto do site nunca ve este cookie.
-  const painel = String(r.dados?.painel ?? "");
-  if (painel) {
-    h.append(
-      "Set-Cookie",
-      `painel_sessao=${painel}; Path=/painel; HttpOnly; Secure; SameSite=Lax; Max-Age=${HORAS_SESSAO_PAINEL * 3600}`,
-    );
+  // ---- SSO do backoffice --------------------------------------------------
+  // Se este e-mail do Google (VERIFICADO pelo proprio Google, degraus 1-3
+  // acima) pertence a um usuario ATIVO do painel, o mesmo login tambem abre o
+  // backend: o Google substitui a SENHA, nunca a autorizacao — quem pode
+  // entrar continua sendo a tabela `usuario`, a mesma fonte do login por
+  // senha. A sessao criada e a opaca de sempre (12h, revogavel, auditada).
+  //
+  // Emitida AQUI, direto no banco, e nao via API /v1: (a) e esta resposta que
+  // chega ao navegador, o cookie tem que sair dela; (b) assim NENHUM endpoint
+  // /v1 sabe emitir sessao de painel — chave de canal vazada nao vira
+  // backoffice. Este toque no banco e de AUTENTICACAO do backoffice (como o
+  // proprio /entrar), nao do caminho de loja — a regra "vitrine so fala com a
+  // API" segue valendo para catalogo, checkout e pedidos.
+  // Falha aqui NUNCA derruba o login da loja: o cliente entra; so o atalho do
+  // painel fica de fora (e o erro vai para o log).
+  try {
+    if (emailVerificado) {
+      const adm = await db.query(
+        `select id from usuario where lower(email::text) = $1 and ativo`,
+        [email],
+      );
+      if (adm.rows.length > 0) {
+        const painel = await novaSessaoToken(adm.rows[0].id);
+        await auditar("painel.login.google", { usuarioId: adm.rows[0].id });
+        h.append(
+          "Set-Cookie",
+          `painel_sessao=${painel}; Path=/painel; HttpOnly; Secure; SameSite=Lax; Max-Age=${HORAS_SESSAO_PAINEL * 3600}`,
+        );
+      }
+    }
+  } catch (e) {
+    console.error(`conta/google/volta: sso do painel falhou: ${e}`);
   }
+
   return new Response(null, { status: 302, headers: h });
 }
