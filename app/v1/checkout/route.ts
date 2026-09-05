@@ -167,6 +167,9 @@ export async function POST(req: Request) {
        values ($1, $2, $3, $4)
        on conflict (email) where email is not null
        do update set nome = coalesce(excluded.nome, cliente.nome),
+                     -- WhatsApp NOVO vence o antigo: e o canal do SAC e a
+                     -- pessoa acabou de digitar o numero atual dela.
+                     telefone = coalesce(excluded.telefone, cliente.telefone),
                      atribuicao_primeira_id = coalesce(cliente.atribuicao_primeira_id,
                                                        excluded.atribuicao_primeira_id)
        returning id`,

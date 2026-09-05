@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { apiGet, chaveConfigurada, formatarDinheiro, modoPagamento } from "../lib/vitrine";
 import { marcaAtual } from "../lib/marcas";
@@ -190,7 +189,6 @@ export default async function Loja() {
                       duas apostas, e nao o mesmo site pintado de outra cor. */}
                   <FormCompra
                     sku={v.sku}
-                    tentativa={randomUUID()}
                     disponivel={v.disponivel}
                     rotulo={marca.rotuloBotao}
                   />
