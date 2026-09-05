@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { marcaAtual } from "../../../lib/marcas";
 import FormCriar from "../FormCriar";
+import Logotipo from "../../Logotipo";
 import { googleConfigurado } from "../../../lib/google";
 
 export const dynamic = "force-dynamic";
@@ -10,29 +11,26 @@ export async function generateMetadata() {
   return { title: `Criar conta — ${m.nome}`, robots: { index: false, follow: false } };
 }
 
+// Mesmo padrao de cartao centralizado do /conta/entrar (guia de identidade).
 export default async function Criar() {
   const marca = await marcaAtual();
   const temGoogle = await googleConfigurado();
 
   return (
-    <main className="wrap">
-      <header className="topo">
-        <div className="marca">
-          <span className="ponto" aria-hidden="true" />
-          {marca.nome}
-        </div>
-      </header>
-
-      <section className="produto">
+    <main className="entrar-tela">
+      <div className="entrar-caixa">
+        <Link href="/" aria-label="Voltar para a loja">
+          <Logotipo codigo={marca.codigo} nome={marca.nome} />
+        </Link>
         <h1>Criar conta</h1>
-        <p className="nota">
-          Use o mesmo e-mail das suas compras: e ele que liga a conta aos seus pedidos.
+        <p className="sub">
+          Use o mesmo e-mail das suas compras: é ele que liga a conta aos seus pedidos.
         </p>
         <FormCriar temGoogle={temGoogle} />
-        <p className="nota">
-          <Link href="/">Voltar para a loja</Link>
+        <p className="nota caixa-pe">
+          <Link href="/">← Voltar para a loja</Link>
         </p>
-      </section>
+      </div>
     </main>
   );
 }

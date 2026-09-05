@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { marcaAtual } from "../../../lib/marcas";
 import FormEntrar from "../FormEntrar";
+import Logotipo from "../../Logotipo";
 import { googleConfigurado } from "../../../lib/google";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,9 @@ export async function generateMetadata() {
   return { title: `Entrar — ${m.nome}`, robots: { index: false, follow: false } };
 }
 
+// Padrao de login do guia de identidade (05/09): cartao centralizado com o
+// logo oficial, CTA crimson unico (Entrar) e Google como caminho SECUNDARIO
+// (botao claro com borda) — nunca dois botoes crimson na mesma tela.
 export default async function Entrar({
   searchParams,
 }: {
@@ -23,22 +27,18 @@ export default async function Entrar({
   const aviso = sp.erro === "google" ? "Nao foi possivel entrar com o Google. Tente de novo ou use e-mail e senha." : "";
 
   return (
-    <main className="wrap">
-      <header className="topo">
-        <div className="marca">
-          <span className="ponto" aria-hidden="true" />
-          {marca.nome}
-        </div>
-      </header>
-
-      <section className="produto">
+    <main className="entrar-tela">
+      <div className="entrar-caixa">
+        <Link href="/" aria-label="Voltar para a loja">
+          <Logotipo codigo={marca.codigo} nome={marca.nome} />
+        </Link>
         <h1>Entrar na sua conta</h1>
-        <p className="nota">Veja todos os seus pedidos e eSIMs num lugar so.</p>
+        <p className="sub">Veja todos os seus pedidos e eSIMs num lugar só.</p>
         <FormEntrar temGoogle={temGoogle} avisoInicial={aviso} />
-        <p className="nota">
-          <Link href="/">Voltar para a loja</Link>
+        <p className="nota caixa-pe">
+          <Link href="/">← Voltar para a loja</Link>
         </p>
-      </section>
+      </div>
     </main>
   );
 }

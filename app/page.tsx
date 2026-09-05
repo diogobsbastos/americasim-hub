@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { apiGet, chaveConfigurada, formatarDinheiro, modoPagamento } from "../lib/vitrine";
 import { marcaAtual } from "../lib/marcas";
-import { LOGO_AMERICASIM } from "../lib/logo-americasim";
 import FormCompra from "./FormCompra";
+import Logotipo from "./Logotipo";
 
 export const dynamic = "force-dynamic";
 
@@ -44,29 +44,6 @@ function textoEstoque(v: Variante): string {
   const q = Number(v.quantidade ?? 0);
   if (!v.disponivel || q <= 0) return "Esgotado";
   return q === 1 ? "1 disponivel agora" : `${q} disponiveis agora`;
-}
-
-// Logotipo por marca: AmericaSim tem o logo oficial (globo + wordmark);
-// as demais caem no wordmark de texto ate terem logo proprio.
-function Logotipo({ codigo, nome }: { codigo: string; nome: string }) {
-  if (codigo === "americasim") {
-    return <img className="logotipo" src={LOGO_AMERICASIM} alt="AmericaSim" />;
-  }
-  return (
-    <span className="marca" aria-label={nome}>
-      <span className="ponto" aria-hidden="true" />
-      <span className="wm">
-        {nome.endsWith("Sim") ? (
-          <>
-            <b>{nome.slice(0, -3)}</b>
-            <i>Sim</i>
-          </>
-        ) : (
-          nome
-        )}
-      </span>
-    </span>
-  );
 }
 
 export default async function Loja() {
