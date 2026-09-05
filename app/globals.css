@@ -372,6 +372,20 @@ table.comp2 { width: 100%; border-collapse: collapse; background: var(--superfic
 }
 .ct-vazio b { display: block; font-family: var(--fonte-titulo); font-size: 1.1rem; }
 .ct-vazio p { color: var(--texto-fraco); font-size: 0.9rem; margin: 4px 0 16px; }
+/* Filtros por situacao (chips) */
+.ct-filtros { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
+.ct-filtro {
+  padding: 7px 14px; border-radius: 999px; font-size: 0.82rem; font-weight: 700;
+  background: var(--superficie); border: 1px solid var(--borda); color: var(--texto-fraco);
+}
+.ct-filtro:hover:not(:disabled) { background: var(--superficie); border-color: var(--marca); color: var(--marca); }
+.ct-filtro.ativo, .ct-filtro.ativo:hover:not(:disabled) { background: var(--realce); border-color: var(--realce); color: #ffffff; }
+.ct-filtro b { font-weight: 800; margin-left: 4px; opacity: 0.75; }
+
+/* Cabecalho da pagina do pedido */
+.ped-topo { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: space-between; margin: 6px 0 18px; }
+.ped-titulo { font-family: var(--fonte-titulo); font-size: 1.6rem; margin: 0; }
+.ped-sub { margin: 2px 0 0; color: var(--texto-fraco); font-size: 0.9rem; }
 @media (max-width: 860px) {
   .ct-lado { display: none; }
   .ct-topo-logo { display: inline-flex; }

@@ -6,6 +6,7 @@ import { COOKIE_SESSAO } from "../../lib/conta";
 import { marcaAtual } from "../../lib/marcas";
 import Logotipo from "../Logotipo";
 import { IcoCelular, IcoChat, IcoFerramenta, IcoIlimitado, IcoQr } from "../Icones";
+import FiltroEsims, { type PedidoLista } from "./FiltroEsims";
 import { sair } from "./acoes";
 
 export const dynamic = "force-dynamic";
@@ -20,31 +21,6 @@ export async function generateMetadata() {
 // e os pedidos numa GRADE de cartoes com botoes — nada de lista solta com
 // link sublinhado. O site inteiro fica amarrado: daqui se vai para a loja,
 // para as duvidas e (admin) para o backend.
-
-interface PedidoLista {
-  numero: string;
-  status: string;
-  entregue: boolean;
-  criado_em: string;
-  esims: number;
-  produto: string | null;
-  gb: number | string | null;
-  dias: number | string | null;
-  t: string;
-}
-
-function chipDoStatus(p: PedidoLista): { classe: string; texto: string } {
-  if (p.entregue) return { classe: "ct-chip ok", texto: "entregue" };
-  if (p.status === "cancelado") return { classe: "ct-chip off", texto: "cancelado" };
-  if (p.status === "aguardando_pagamento") return { classe: "ct-chip espera", texto: "aguardando pagamento" };
-  if (p.status === "pago") return { classe: "ct-chip espera", texto: "preparando seu eSIM" };
-  return { classe: "ct-chip off", texto: p.status };
-}
-
-function tituloDoPedido(p: PedidoLista): string {
-  if (p.gb) return `${p.gb} GB${p.dias ? ` · ${p.dias} dias` : ""}`;
-  return `Pedido ${p.numero}`;
-}
 
 function Shell({
   codigo,
@@ -160,37 +136,7 @@ export default async function MeusPedidos() {
           <Link className="botao" href="/#planos">Ver planos →</Link>
         </div>
       ) : (
-        <div className="ct-grade">
-          {pedidos.map((p) => {
-            const chip = chipDoStatus(p);
-            const url = `/pedido?pedido=${encodeURIComponent(p.numero)}&t=${encodeURIComponent(p.t)}`;
-            return (
-              <article key={p.numero} className="ct-cartao">
-                <div className="ct-cartao-topo">
-                  <span className="ct-ico" aria-hidden="true"><IcoQr /></span>
-                  <div className="ct-cartao-titulo">
-                    <b>{tituloDoPedido(p)}</b>
-                    {p.produto ? <p>{p.produto}</p> : null}
-                  </div>
-                  <span className={chip.classe}>{chip.texto}</span>
-                </div>
-                <p className="ct-meta">
-                  <code>{p.numero}</code> · {new Date(p.criado_em).toLocaleDateString("pt-BR")}
-                  {p.esims > 0 ? ` · ${p.esims} eSIM${p.esims === 1 ? "" : "s"}` : ""}
-                </p>
-                <div className="ct-acoes">
-                  {p.entregue ? (
-                    <Link className="botao" href={url}>Ver eSIM e QR →</Link>
-                  ) : p.status === "cancelado" ? (
-                    <Link className="botao secundario" href={url}>Detalhes</Link>
-                  ) : (
-                    <Link className="botao secundario" href={url}>Acompanhar pedido →</Link>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
+        <FiltroEsims pedidos={pedidos} />
       )}
     </Shell>
   );

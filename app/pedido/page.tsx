@@ -4,6 +4,7 @@ import { marcaAtual } from "../../lib/marcas";
 import CartaoEsim, { type AtivacaoTela } from "./CartaoEsim";
 import AtualizaSozinho from "./AtualizaSozinho";
 import Logotipo from "../Logotipo";
+import Rodape from "../Rodape";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,37 @@ export async function generateMetadata() {
     title: `Seu pedido — ${m.nome}`,
     robots: { index: false, follow: false },
   };
+}
+
+// Cabecalho da pagina do pedido: mesmo padrao do site. Quem chega pelo LINK DO
+// E-MAIL pode nao estar logado — por isso ha "Meus eSIMs" (leva ao login se
+// preciso) e nada aqui depende de sessao.
+function Cabecalho({ codigo, nome }: { codigo: string; nome: string }) {
+  return (
+    <header className="cab">
+      <Link href="/" aria-label="Voltar para a loja" style={{ display: "inline-flex" }}>
+        {/* Quem comprou na ViagemSim nao pode cair numa tela escrita
+            AmericaSim: seria a primeira coisa a fazer o cliente achar que
+            caiu num golpe, justamente na pagina onde ele espera o produto.
+            O Logotipo ja resolve por marca. */}
+        <Logotipo codigo={codigo} nome={nome} />
+      </Link>
+      <nav className="cab-links" aria-label="menu principal">
+        <Link href="/#planos">Planos</Link>
+        <Link href="/duvidas">Dúvidas</Link>
+      </nav>
+      <div className="cab-conta">
+        <Link className="botao secundario" href="/conta">Meus eSIMs</Link>
+      </div>
+    </header>
+  );
+}
+
+function chipDoPedido(p: any): { classe: string; texto: string } {
+  if (p.entregue) return { classe: "ct-chip ok", texto: "entregue" };
+  if (p.status === "cancelado") return { classe: "ct-chip off", texto: "cancelado" };
+  if (p.status === "aguardando_pagamento") return { classe: "ct-chip espera", texto: "aguardando pagamento" };
+  return { classe: "ct-chip espera", texto: "preparando seu eSIM" };
 }
 
 export default async function Pedido({
@@ -43,16 +75,16 @@ export default async function Pedido({
   if (!numero || !token) {
     return (
       <main className="wrap">
+        <Cabecalho codigo={marca.codigo} nome={marca.nome} />
         <div className="aviso">
           <h1>Link incompleto</h1>
           <p>
-            Este endereco precisa do numero do pedido e do token de acompanhamento. Use o link
-            que voce recebeu apos a compra.
-          </p>
-          <p>
-            <Link href="/">Voltar para a loja</Link>
+            Este endereço precisa do número do pedido e do código de acompanhamento. Use o
+            link que você recebeu por e-mail após a compra — ou entre em{" "}
+            <Link href="/conta">Meus eSIMs</Link>.
           </p>
         </div>
+        <Rodape />
       </main>
     );
   }
@@ -66,19 +98,22 @@ export default async function Pedido({
   if (!r.ok) {
     return (
       <main className="wrap">
+        <Cabecalho codigo={marca.codigo} nome={marca.nome} />
         <div className="aviso">
-          <h1>Pedido nao encontrado</h1>
-          <p>Confira se o link esta completo, incluindo o codigo depois de {"&t="}.</p>
+          <h1>Pedido não encontrado</h1>
+          <p>Confira se o link está completo, incluindo o código depois de {"&t="}.</p>
           <p>
-            <Link href="/">Voltar para a loja</Link>
+            <Link href="/conta">Ver meus eSIMs</Link>
           </p>
         </div>
+        <Rodape />
       </main>
     );
   }
 
   const p = r.dados ?? {};
   const ativacoes: AtivacaoTela[] = p.ativacoes ?? [];
+  const chip = chipDoPedido(p);
 
   // A tela se mantem viva sozinha enquanto ha o que esperar: rapido durante a
   // preparacao, devagar esperando a instalacao, desligada quando tudo instalou.
@@ -88,59 +123,46 @@ export default async function Pedido({
 
   return (
     <main className="wrap">
-      <header className="topo">
-        {/* Quem comprou na ViagemSim nao pode cair numa tela escrita
-            AmericaSim: seria a primeira coisa a fazer o cliente achar que
-            caiu num golpe, justamente na pagina onde ele espera o produto.
-            O Logotipo ja resolve por marca. */}
-        <Logotipo codigo={marca.codigo} nome={marca.nome} />
-      </header>
+      <Cabecalho codigo={marca.codigo} nome={marca.nome} />
 
-      <section className="produto">
-        <h1>{p.entregue ? "Seu eSIM esta pronto" : "Pedido recebido"}</h1>
-
-        <div className="pedido-meta">
-          <div className="linha">
-            <span>Numero do pedido</span>
-            <code>{p.numero}</code>
-          </div>
-          <div className="linha">
-            <span>Situacao</span>
-            <code>{p.status}</code>
-          </div>
-          {p.entregue_em ? (
-            <div className="linha">
-              <span>Entregue em</span>
-              <code>{new Date(p.entregue_em).toLocaleString("pt-BR")}</code>
-            </div>
-          ) : null}
-        </div>
-
-        {ativacoes.length > 0 ? (
-          ativacoes.map((a) => <CartaoEsim key={a.id} a={a} />)
-        ) : (
-          <p className="nota">
-            Estamos separando o seu eSIM. Esta pagina se atualiza sozinha — e o link e a sua
-            chave de acesso ao pedido, guarde-o.
+      <div className="ped-topo">
+        <div>
+          <h1 className="ped-titulo">
+            {p.entregue ? <>Seu eSIM está pronto 🎉</> : <>Pedido recebido</>}
+          </h1>
+          <p className="ped-sub">
+            Pedido <code>{p.numero}</code>
+            {p.entregue_em ? <> · entregue em {new Date(p.entregue_em).toLocaleString("pt-BR")}</> : null}
           </p>
-        )}
+        </div>
+        <span className={chip.classe}>{chip.texto}</span>
+      </div>
 
-        {esperandoEntrega ? (
-          <AtualizaSozinho aCadaMs={20_000} />
-        ) : esperandoInstalacao ? (
-          <AtualizaSozinho aCadaMs={60_000} />
-        ) : null}
+      {ativacoes.length > 0 ? (
+        ativacoes.map((a) => <CartaoEsim key={a.id} a={a} />)
+      ) : (
+        <div className="aviso">
+          <h1>Separando o seu eSIM…</h1>
+          <p className="nota" style={{ marginTop: 6 }}>
+            Esta página se atualiza sozinha — e o link dela é a sua chave de acesso ao
+            pedido, guarde-o. O QR também chega no seu e-mail.
+          </p>
+        </div>
+      )}
 
-        <p style={{ marginTop: 22 }}>
-          <Link className="botao secundario" href="/#planos">Comprar outro eSIM</Link>
-        </p>
+      {esperandoEntrega ? (
+        <AtualizaSozinho aCadaMs={20_000} />
+      ) : esperandoInstalacao ? (
+        <AtualizaSozinho aCadaMs={60_000} />
+      ) : null}
 
-        <p className="nota">
-          <Link href="/">Voltar para a loja</Link>
-          {" · "}
-          <Link href="/conta">Meus pedidos</Link>
-        </p>
-      </section>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 24 }}>
+        <Link className="botao secundario" href="/conta">← Meus eSIMs</Link>
+        <Link className="botao secundario" href="/#planos">Comprar outro eSIM</Link>
+        <Link className="botao secundario" href="/duvidas#instalar">Ajuda para instalar</Link>
+      </div>
+
+      <Rodape />
     </main>
   );
 }

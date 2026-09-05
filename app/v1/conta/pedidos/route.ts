@@ -44,6 +44,7 @@ export async function POST(req: Request) {
   const r = await db.query(
     `select p.numero, p.status, p.entregue, p.criado_em,
             count(a.id)::int as esims,
+            count(a.id) filter (where a.status = 'instalado')::int as instalados,
             it.produto, it.atributos
        from pedido p
        join cliente c on c.id = p.cliente_id
@@ -72,6 +73,7 @@ export async function POST(req: Request) {
       entregue: p.entregue,
       criado_em: p.criado_em,
       esims: p.esims,
+      instalados: p.instalados,
       produto: p.produto ?? null,
       gb: p.atributos?.gb ?? null,
       dias: p.atributos?.dias ?? null,
