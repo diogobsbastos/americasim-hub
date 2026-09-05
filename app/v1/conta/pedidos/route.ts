@@ -38,14 +38,27 @@ export async function POST(req: Request) {
   // Pedidos do MESMO CANAL da vitrine que pergunta (cada loja mostra o que
   // vendeu). O token de acompanhamento sai assinado fresco — mesmo formato do
   // link do checkout, entao a pagina do pedido nao muda nada.
+  // `it` (lateral): o PLANO do pedido — nome do produto e atributos (gb/dias)
+  // do primeiro item. E o que faz o cartao do painel dizer "eSIM Europa ·
+  // 5 GB · 15 dias" em vez de so um numero de pedido.
   const r = await db.query(
     `select p.numero, p.status, p.entregue, p.criado_em,
-            count(a.id)::int as esims
+            count(a.id)::int as esims,
+            it.produto, it.atributos
        from pedido p
        join cliente c on c.id = p.cliente_id
        left join ativacao a on a.pedido_id = p.id
+       left join lateral (
+         select pr.nome as produto, v.atributos
+           from item_pedido ip
+           join variante v on v.id = ip.variante_id
+           join produto pr on pr.id = v.produto_id
+          where ip.pedido_id = p.id
+          order by ip.id
+          limit 1
+       ) it on true
       where lower(c.email::text) = $1 and p.canal_id = $2
-      group by p.id
+      group by p.id, it.produto, it.atributos
       order by p.criado_em desc
       limit 50`,
     [c.email.toLowerCase(), canal.id],
@@ -59,6 +72,9 @@ export async function POST(req: Request) {
       entregue: p.entregue,
       criado_em: p.criado_em,
       esims: p.esims,
+      produto: p.produto ?? null,
+      gb: p.atributos?.gb ?? null,
+      dias: p.atributos?.dias ?? null,
       t: assinarAcompanhamento(p.numero),
     })),
   });

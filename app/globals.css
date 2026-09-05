@@ -17,6 +17,7 @@
   --texto-fraco: #59627a;
   --marca: #f80838;
   --marca-forte: #c7062c;
+  --marca-suave: #fde9ee;
   --marca-contraste: #ffffff;
   --realce: #001b54;
   --ok: #0e8a4d;
@@ -42,6 +43,7 @@
     --texto-fraco: #8fa0c9;
     --marca: #f80838;
     --marca-forte: #ff3d64;
+    --marca-suave: #3b1526;
     --marca-contraste: #ffffff;
     --realce: #c9d2e8;
     --ok: #2fbf7a;
@@ -67,6 +69,7 @@ html[data-marca="americasim"]:has(main.entrar-tela) {
   --texto-fraco: #59627a;
   --marca: #f80838;
   --marca-forte: #c7062c;
+  --marca-suave: #fde9ee;
   --marca-contraste: #ffffff;
   --realce: #001b54;
   --ok: #0e8a4d;
@@ -294,6 +297,85 @@ table.comp2 { width: 100%; border-collapse: collapse; background: var(--superfic
 .pedido-status { font-weight: 700; color: var(--texto); }
 .pedido-status.ok { color: var(--ok); }
 .pedido-status.off { color: var(--texto-fraco); font-weight: 600; }
+
+/* ===== area do cliente (/conta): shell de painel com sidebar =====
+   Referencia estrutural: painel do QueroConsertar (sidebar + topo com acao
+   principal + saudacao + grade de cartoes). Identidade: AmericaSim. */
+.wrap.ct-shell { max-width: none; padding: 0; display: flex; min-height: 100vh; align-items: stretch; }
+.ct-lado {
+  width: 232px; flex-shrink: 0; background: var(--superficie);
+  border-right: 1px solid var(--borda); position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column; padding: 18px 14px;
+}
+.ct-logo { display: inline-flex; margin: 2px 8px 20px; }
+.ct-logo .logotipo { height: 32px; }
+.ct-nav { display: flex; flex-direction: column; gap: 4px; }
+.ct-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 12px; color: var(--texto-fraco); font-weight: 600;
+  font-size: 0.92rem; text-decoration: none;
+}
+.ct-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+.ct-item:hover { background: var(--superficie-2); color: var(--texto); }
+.ct-item.ativo { background: var(--marca-suave); color: var(--marca); }
+.ct-sair { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--borda); }
+.ct-sair button {
+  width: 100%; background: transparent; border: 0; color: var(--texto-fraco);
+  font-weight: 600; font-size: 0.9rem; text-align: left; padding: 10px 12px;
+  border-radius: 12px; display: flex; gap: 10px; align-items: center;
+}
+.ct-sair button:hover:not(:disabled) { background: var(--superficie-2); color: var(--texto); }
+.ct-corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ct-topo {
+  position: sticky; top: 0; z-index: 40; background: var(--superficie);
+  border-bottom: 1px solid var(--borda); height: 62px;
+  display: flex; align-items: center; gap: 12px; padding: 0 20px;
+}
+.ct-topo-logo { display: none; }
+.ct-topo-acoes { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.ct-topo-acoes .botao { padding: 9px 16px; font-size: 0.88rem; border-radius: 999px; }
+.ct-so-celular { display: none !important; }
+.ct-main { width: 100%; max-width: 1020px; margin: 0 auto; padding: 30px 20px 60px; }
+.ct-ola { font-family: var(--fonte-titulo); font-size: 1.7rem; font-weight: 800; margin: 0; }
+.ct-quem { margin: 4px 0 0; color: var(--texto-fraco); font-size: 0.9rem; }
+.ct-rotulo { font-size: 0.76rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--texto-fraco); margin: 30px 0 12px; }
+.ct-grade { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.ct-cartao {
+  background: var(--superficie); border: 1px solid var(--borda);
+  border-radius: 18px; padding: 18px; box-shadow: var(--sombra);
+  display: flex; flex-direction: column;
+}
+.ct-cartao-topo { display: flex; align-items: flex-start; gap: 12px; }
+.ct-ico {
+  display: inline-grid; place-items: center; width: 42px; height: 42px;
+  border-radius: 12px; background: var(--marca-suave); color: var(--marca); flex-shrink: 0;
+}
+.ct-cartao-titulo { min-width: 0; flex: 1; }
+.ct-cartao-titulo b { display: block; font-family: var(--fonte-titulo); font-size: 1.05rem; }
+.ct-cartao-titulo p { margin: 0; color: var(--texto-fraco); font-size: 0.82rem; }
+.ct-chip { flex-shrink: 0; font-size: 0.7rem; font-weight: 700; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.ct-chip.ok { background: rgba(14, 138, 77, 0.12); color: var(--ok); }
+.ct-chip.espera { background: rgba(185, 122, 0, 0.12); color: var(--alerta); }
+.ct-chip.off { background: var(--superficie-2); color: var(--texto-fraco); }
+.ct-meta { margin: 12px 0 0; color: var(--texto-fraco); font-size: 0.8rem; }
+.ct-acoes { margin-top: auto; padding-top: 14px; display: flex; gap: 8px; }
+.ct-acoes .botao { display: block; flex: 1; text-align: center; font-size: 0.9rem; padding: 10px 14px; }
+.ct-vazio {
+  background: var(--superficie); border: 1px solid var(--borda); border-radius: 18px;
+  box-shadow: var(--sombra); padding: 40px 24px; text-align: center; max-width: 460px;
+}
+.ct-vazio-ico {
+  display: inline-grid; place-items: center; width: 54px; height: 54px;
+  border-radius: 16px; background: var(--marca-suave); color: var(--marca); margin-bottom: 10px;
+}
+.ct-vazio b { display: block; font-family: var(--fonte-titulo); font-size: 1.1rem; }
+.ct-vazio p { color: var(--texto-fraco); font-size: 0.9rem; margin: 4px 0 16px; }
+@media (max-width: 860px) {
+  .ct-lado { display: none; }
+  .ct-topo-logo { display: inline-flex; }
+  .ct-topo-logo .logotipo { height: 30px; }
+  .ct-so-celular { display: inline-flex !important; }
+}
 .linha {
   display: flex; justify-content: space-between; align-items: center;
   gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--borda);
