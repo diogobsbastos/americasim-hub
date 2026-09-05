@@ -91,7 +91,12 @@ async function montarEntrega(pedidoId: string) {
   const { numero, canal_nome, dominio } = p.rows[0];
 
   const marca = String(dominio ?? "").includes("viagemsim") ? "ViagemSim" : "AmericaSim";
-  const base = dominio ? `https://${dominio}` : "https://americasim.com.br";
+  // 'localhost' e resquicio de configuracao de teste (canal lp-teste) — link de
+  // e-mail apontando para https://localhost e botao morto na caixa do cliente.
+  // O conserto de verdade e corrigir canal.dominio no banco; esta guarda impede
+  // que a misconfiguracao vire e-mail quebrado de novo.
+  const dominioUtil = dominio && dominio !== "localhost" ? dominio : "";
+  const base = dominioUtil ? `https://${dominioUtil}` : "https://americasim.com.br";
   const link = `${base}/pedido?pedido=${encodeURIComponent(numero)}&t=${encodeURIComponent(assinarAcompanhamento(numero, 24 * 365))}`;
 
   const a = await db.query(
@@ -135,7 +140,13 @@ async function montarEntrega(pedidoId: string) {
     `<div style="background:#f7f8fc;padding:24px 12px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a2233">` +
     `<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e6f0;border-radius:14px;overflow:hidden">` +
       `<div style="padding:18px 26px;border-bottom:3px solid ${cores.acento};font-size:22px;font-weight:800;letter-spacing:-0.5px">` +
-        `<span style="color:${cores.titulo}">${prefixo}</span><span style="color:${cores.acento}">${cores.sufixo}</span>` +
+        // AmericaSim: logo REAL hospedado (Gmail bloqueia data: URI; a rota
+        // /marca/logo-horizontal.png serve o mesmo PNG do site). O alt cai no
+        // wordmark quando o cliente de e-mail bloqueia imagens. ViagemSim segue
+        // no wordmark ate ter identidade propria.
+        (marca === "AmericaSim"
+          ? `<img src="https://americasim.com.br/marca/logo-horizontal.png" alt="AmericaSim" width="200" height="23" style="display:block;border:0" />`
+          : `<span style="color:${cores.titulo}">${prefixo}</span><span style="color:${cores.acento}">${cores.sufixo}</span>`) +
       `</div>` +
       `<div style="padding:24px 26px;font-size:15px;line-height:1.6">` +
         `<h1 style="margin:0 0 10px;font-size:20px;line-height:1.3;color:${cores.titulo}">Seu eSIM chegou 🎉</h1>` +
