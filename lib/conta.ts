@@ -10,6 +10,13 @@ const SEGREDO = process.env.TOKEN_SECRET ?? "";
 export const COOKIE_SESSAO = "sessao_conta";
 export const DIAS_SESSAO = 30;
 
+// Destino de retorno pos-login (?voltar=...): so caminho RELATIVO do nosso
+// proprio site. "//" e "\\" barrados — virariam redirect aberto para outro
+// dominio, o classico open redirect de phishing.
+export function voltarValido(v: string): boolean {
+  return v.startsWith("/") && !v.startsWith("//") && !v.includes("\\") && v.length <= 200;
+}
+
 // scrypt com sal proprio, formato versionado "s2$<sal>$<hash>" — da para trocar
 // de algoritmo no futuro sem invalidar as senhas antigas.
 export function hashSenha(senha: string): string {

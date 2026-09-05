@@ -30,15 +30,33 @@ async function atribuicaoDosCookies() {
   }
 }
 
-// POST /v1/checkout. Em modo dev (sem STRIPE_SECRET_KEY) a API considera pago e
-// entrega na hora, entao o redirecionamento cai direto na pagina do pedido.
-export async function comprar(_anterior: EstadoCompra, form: FormData): Promise<EstadoCompra> {
+// Normaliza o WhatsApp digitado para +55DDDNUMERO. Aceita com ou sem +55, com
+// ou sem mascara. Devolve null quando nao da para aproveitar: a validacao
+// conversa com o cliente na tela — lixo nao entra no banco, porque este numero
+// e o canal do SAC em viagem.
+function normalizarZap(bruto: string): string | null {
+  const digitos = bruto.replace(/\D/g, "");
+  const semPais =
+    digitos.startsWith("55") && digitos.length >= 12 ? digitos.slice(2) : digitos;
+  // DDD (2 digitos) + numero (8 fixo ou 9 celular).
+  if (semPais.length !== 10 && semPais.length !== 11) return null;
+  return `+55${semPais}`;
+}
+
+// POST /v1/checkout, chamado pela pagina /finalizar. Em modo dev (sem
+// STRIPE_SECRET_KEY) a API considera pago e entrega na hora, entao o
+// redirecionamento cai direto na pagina do pedido.
+export async function finalizarCompra(_anterior: EstadoCompra, form: FormData): Promise<EstadoCompra> {
   const sku = String(form.get("sku") ?? "");
   const email = String(form.get("email") ?? "").trim();
   const tentativa = String(form.get("tentativa") ?? "");
+  const telefone = normalizarZap(String(form.get("telefone") ?? ""));
 
   if (!sku) return { erro: "Produto invalido." };
   if (!email.includes("@")) return { erro: "Informe um e-mail valido." };
+  if (!telefone) {
+    return { erro: "Informe um WhatsApp valido com DDD — ex.: (11) 91234-5678." };
+  }
 
   // Idempotency-Key DERIVADA (SPEC/00 3.4): tentativa desta tela + carrinho + cliente.
   // Duplo-clique no mesmo formulario colide e devolve o MESMO pedido; recarregar a
@@ -53,7 +71,7 @@ export async function comprar(_anterior: EstadoCompra, form: FormData): Promise<
     "/v1/checkout",
     {
       itens: [{ sku, quantidade: 1 }],
-      cliente: { email },
+      cliente: { email, telefone },
       url_sucesso: `${base}/pedido`,
       atribuicao: await atribuicaoDosCookies(),
     },

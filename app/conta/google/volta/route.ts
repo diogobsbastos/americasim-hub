@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { apiPost, basePublica } from "../../../../lib/vitrine";
-import { COOKIE_SESSAO, DIAS_SESSAO } from "../../../../lib/conta";
+import { COOKIE_SESSAO, DIAS_SESSAO, voltarValido } from "../../../../lib/conta";
 import { configGoogle } from "../../../../lib/google";
 
 export const dynamic = "force-dynamic";
@@ -87,12 +87,27 @@ export async function GET(req: Request) {
   const sessao = String(r.dados?.sessao ?? "");
   if (!r.ok || !sessao) return falha(`/v1/conta/google: ${r.erro_codigo}`);
 
+  // Quem comecou o login no checkout volta para o checkout (cookie g_voltar,
+  // gravado em /conta/google). Validado DE NOVO aqui: cookie tambem e entrada.
+  let destino = `${base}/conta`;
+  const brutoVoltar = (req.headers.get("cookie") ?? "")
+    .split(/;\s*/)
+    .find((p) => p.startsWith("g_voltar="))
+    ?.slice("g_voltar=".length) ?? "";
+  try {
+    const voltar = decodeURIComponent(brutoVoltar);
+    if (voltar && voltarValido(voltar)) destino = `${base}${voltar}`;
+  } catch {
+    // cookie ilegivel = segue para /conta
+  }
+
   const h = new Headers();
-  h.set("Location", `${base}/conta`);
+  h.set("Location", destino);
   h.append(
     "Set-Cookie",
     `${COOKIE_SESSAO}=${sessao}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${DIAS_SESSAO * 86400}`,
   );
   h.append("Set-Cookie", "g_state=; Path=/conta/google; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+  h.append("Set-Cookie", "g_voltar=; Path=/conta/google; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
   return new Response(null, { status: 302, headers: h });
 }

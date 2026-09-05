@@ -1,42 +1,29 @@
-"use client";
+import Link from "next/link";
 
-import { useActionState } from "react";
-import { comprar } from "./acoes";
-import { ESTADO_COMPRA_INICIAL } from "./tipos";
-
+// O cartao de plano nao coleta mais nada: o botao leva para /finalizar, onde
+// vive o checkout de verdade (Google em 1 clique, e-mail, WhatsApp para o SAC).
+// Pedir e-mail aqui e de novo la seria digitar duas vezes a mesma coisa.
 export default function FormCompra({
   sku,
-  tentativa,
   disponivel,
   rotulo = "Comprar",
 }: {
   sku: string;
-  tentativa: string;
   disponivel: boolean;
   rotulo?: string;
 }) {
-  const [estado, acao, pendente] = useActionState(comprar, ESTADO_COMPRA_INICIAL);
-
+  if (!disponivel) {
+    return (
+      <div className="compra">
+        <button type="button" disabled>Esgotado</button>
+      </div>
+    );
+  }
   return (
-    <form action={acao} className="compra">
-      <input type="hidden" name="sku" value={sku} />
-      <input type="hidden" name="tentativa" value={tentativa} />
-      <label className="rotulo" htmlFor={`email-${sku}`}>
-        E-mail para receber o eSIM
-      </label>
-      <input
-        id={`email-${sku}`}
-        type="email"
-        name="email"
-        required
-        autoComplete="email"
-        placeholder="voce@exemplo.com"
-        disabled={!disponivel || pendente}
-      />
-      <button type="submit" disabled={!disponivel || pendente}>
-        {pendente ? "Processando…" : disponivel ? rotulo : "Esgotado"}
-      </button>
-      {estado.erro ? <p className="erro">{estado.erro}</p> : null}
-    </form>
+    <div className="compra">
+      <Link className="botao" href={`/finalizar?sku=${encodeURIComponent(sku)}`}>
+        {rotulo}
+      </Link>
+    </div>
   );
 }

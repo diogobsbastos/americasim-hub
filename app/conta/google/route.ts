@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { basePublica } from "../../../lib/vitrine";
 import { configGoogle } from "../../../lib/google";
+import { voltarValido } from "../../../lib/conta";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +20,16 @@ function assinarEstado(): string {
   return `${exp}.${mac}`;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const { clientId, clientSecret } = await configGoogle();
   if (!clientId || !clientSecret) {
     return Response.redirect(`${await basePublica()}/conta/entrar?erro=google`, 302);
   }
+
+  // ?voltar=/finalizar?sku=... — quem comecou o login no checkout volta para o
+  // checkout, nao para /conta. Guardado em cookie (nao no state) para o state
+  // continuar sendo so anti-CSRF.
+  const voltar = new URL(req.url).searchParams.get("voltar") ?? "";
 
   const estado = assinarEstado();
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -40,5 +46,11 @@ export async function GET() {
     "Set-Cookie",
     `g_state=${estado}; Path=/conta/google; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
   );
+  if (voltarValido(voltar)) {
+    h.append(
+      "Set-Cookie",
+      `g_voltar=${encodeURIComponent(voltar)}; Path=/conta/google; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
+    );
+  }
   return new Response(null, { status: 302, headers: h });
 }
