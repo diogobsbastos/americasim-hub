@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { apiPost, basePublica } from "../../../../lib/vitrine";
 import { COOKIE_SESSAO, DIAS_SESSAO, voltarValido } from "../../../../lib/conta";
 import { configGoogle } from "../../../../lib/google";
+import { HORAS_SESSAO_PAINEL } from "../../../../lib/painel/sessao";
 
 export const dynamic = "force-dynamic";
 
@@ -109,5 +110,17 @@ export async function GET(req: Request) {
   );
   h.append("Set-Cookie", "g_state=; Path=/conta/google; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
   h.append("Set-Cookie", "g_voltar=; Path=/conta/google; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+
+  // SSO do backoffice: quando a API reconheceu o e-mail como usuario ATIVO do
+  // painel, ela devolve tambem o token da sessao do painel — e o cookie e
+  // gravado AQUI, porque e esta resposta que chega ao navegador. Path=/painel:
+  // o resto do site nunca ve este cookie.
+  const painel = String(r.dados?.painel ?? "");
+  if (painel) {
+    h.append(
+      "Set-Cookie",
+      `painel_sessao=${painel}; Path=/painel; HttpOnly; Secure; SameSite=Lax; Max-Age=${HORAS_SESSAO_PAINEL * 3600}`,
+    );
+  }
   return new Response(null, { status: 302, headers: h });
 }

@@ -34,9 +34,19 @@ export async function POST(req: Request) {
   if (r.rows.length === 0) return erro(401, "sessao_invalida", "Entre de novo na sua conta.");
 
   const p = r.rows[0];
+
+  // `backend`: este e-mail tambem e um usuario ATIVO do backoffice? A vitrine
+  // usa isso so para MOSTRAR o botao "Abrir o backend" — a entrada de verdade
+  // continua guardada pela sessao propria do painel (cookie painel_sessao).
+  const adm = await db.query(
+    `select 1 from usuario where lower(email::text) = lower($1) and ativo`,
+    [p.email],
+  );
+
   return Response.json({
     email: p.email,
     nome: p.nome ?? null,
     telefone: p.telefone ?? null,
+    backend: adm.rows.length > 0,
   });
 }

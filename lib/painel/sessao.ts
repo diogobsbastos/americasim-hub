@@ -109,7 +109,11 @@ export async function excedeuTentativas(): Promise<boolean> {
 
 // ---------------------------------------------------------------- sessao
 
-export async function criarSessao(usuarioId: string): Promise<void> {
+// Cria a linha da sessao e devolve o TOKEN CRU, sem tocar em cookie. Existe
+// separada porque o login pelo Google acontece em DOIS processos de requisicao:
+// a API (/v1/conta/google) cria a sessao, mas quem responde ao NAVEGADOR e a
+// rota da vitrine (/conta/google/volta) — o cookie tem que ser gravado la.
+export async function novaSessaoToken(usuarioId: string): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   const ip = await ipDaRequisicao();
   await db.query(
@@ -117,6 +121,15 @@ export async function criarSessao(usuarioId: string): Promise<void> {
      values ($1, $2, now() + interval '${HORAS_VALIDADE} hours', $3, $4)`,
     [usuarioId, sha(token), sha(ip), await userAgent()],
   );
+  return token;
+}
+
+// Quantas horas a sessao vale — exportado para quem grava o cookie fora daqui
+// (o Max-Age do cookie tem que casar com o expira_em da linha).
+export const HORAS_SESSAO_PAINEL = HORAS_VALIDADE;
+
+export async function criarSessao(usuarioId: string): Promise<void> {
+  const token = await novaSessaoToken(usuarioId);
 
   // `secure` vem do protocolo real visto pelo proxy. Em producao o Nginx manda
   // X-Forwarded-Proto: https e o cookie sai marcado; no loopback (teste) sai sem

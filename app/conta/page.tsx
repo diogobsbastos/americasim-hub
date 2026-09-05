@@ -32,6 +32,12 @@ export default async function MeusPedidos() {
 
   if (!r.ok && r.erro_codigo === "sessao_invalida") redirect("/conta/entrar");
 
+  // Admin logado (e-mail que tambem e usuario ativo do painel) ganha o atalho
+  // "Abrir o backend". So o BOTAO depende disto — a porta do painel confere a
+  // propria sessao (cookie painel_sessao, criado no login com Google).
+  const perfil = await apiPost("/v1/conta/perfil", { sessao });
+  const temBackend = perfil.ok && perfil.dados?.backend === true;
+
   // Conta criada com senha e ainda sem e-mail confirmado: nada de pedidos.
   // E a trava anti-espiao (alguem criando conta com e-mail alheio) — a tela
   // diz isso com todas as letras em vez de fingir que nao ha pedidos.
@@ -105,7 +111,13 @@ export default async function MeusPedidos() {
           ))
         )}
 
-        <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 16 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
+          {temBackend ? (
+            /* <a>, nao <Link>: /painel confere a sessao no servidor e navegacao
+               de app do Next atrapalharia o redirect para /entrar quando ela
+               tiver expirado. */
+            <a className="botao" href="/painel">Abrir o backend →</a>
+          ) : null}
           <form action={sair}>
             <button type="submit" className="secundario">Sair</button>
           </form>

@@ -1,6 +1,7 @@
 import { autenticar, erro } from "../../../../lib/api";
 import { db } from "../../../../lib/db";
 import { assinarSessao } from "../../../../lib/conta";
+import { auditar, novaSessaoToken } from "../../../../lib/painel/sessao";
 
 export const dynamic = "force-dynamic";
 
@@ -56,5 +57,29 @@ export async function POST(req: Request) {
     }
   }
 
-  return Response.json({ sessao: assinarSessao(id) });
+  // ---- SSO do backoffice -------------------------------------------------
+  // Se este e-mail do Google (VERIFICADO) pertence a um usuario ATIVO do
+  // painel, o mesmo login tambem abre o backend: o Google substitui a SENHA,
+  // nunca a autorizacao — quem pode entrar continua sendo definido pela tabela
+  // `usuario`, a mesma fonte da tela de login por senha. A sessao criada e a
+  // sessao opaca de sempre (12h, revogavel, auditada).
+  //
+  // Guarda extra: so quando a chamada veio DIRETO do loopback (a vitrine
+  // falando com a API dentro da maquina). Requisicao que passou pelo Nginx
+  // carrega X-Forwarded-For — essa nao ganha sessao de painel, mesmo com a
+  // chave de canal certa: chave de vitrine vazada nao pode virar backoffice.
+  let painel: string | undefined;
+  const veioDeFora = Boolean(req.headers.get("x-forwarded-for") || req.headers.get("x-forwarded-host"));
+  if (emailVerificado && !veioDeFora) {
+    const adm = await db.query(
+      `select id, nome from usuario where lower(email::text) = $1 and ativo`,
+      [email],
+    );
+    if (adm.rows.length > 0) {
+      painel = await novaSessaoToken(adm.rows[0].id);
+      await auditar("painel.login.google", { usuarioId: adm.rows[0].id });
+    }
+  }
+
+  return Response.json({ sessao: assinarSessao(id), ...(painel ? { painel } : {}) });
 }
