@@ -4,6 +4,7 @@ import { apiGet, chaveConfigurada, formatarDinheiro, modoPagamento } from "../li
 import { marcaAtual } from "../lib/marcas";
 import FormCompra from "./FormCompra";
 import Logotipo from "./Logotipo";
+import Rodape from "./Rodape";
 import { IcoAviao, IcoChat, IcoEscudo, IcoIlimitado, IcoQr, IcoRede } from "./Icones";
 
 export const dynamic = "force-dynamic";
@@ -320,12 +321,7 @@ export default async function Loja() {
         </p>
       </section>
 
-      <footer className="rodape">
-        <p style={{ margin: 0 }}>
-          <b>{marca.nome}</b> · internet de viagem sem roaming e sem susto · atendimento
-          24/7 em português
-        </p>
-      </footer>
+      <Rodape />
     </main>
   );
 }

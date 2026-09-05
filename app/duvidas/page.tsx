@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { marcaAtual } from "../../lib/marcas";
 import Logotipo from "../Logotipo";
+import Rodape from "../Rodape";
 import { IcoAviao, IcoCadeado, IcoCelular, IcoFerramenta, IcoIlimitado, IcoLivro, IcoQr, IcoRede } from "../Icones";
 
 export const dynamic = "force-dynamic";
@@ -317,12 +318,7 @@ export default async function Duvidas() {
         <Link className="botao" href="/#planos">Tudo pronto? Pegar meu eSIM →</Link>
       </section>
 
-      <footer className="rodape">
-        <p style={{ margin: 0 }}>
-          <b>{marca.nome}</b> · internet de viagem sem roaming e sem susto · atendimento
-          24/7 em português
-        </p>
-      </footer>
+      <Rodape />
     </main>
   );
 }

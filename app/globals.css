@@ -316,6 +316,29 @@ table.comp2 { width: 100%; border-collapse: collapse; background: var(--superfic
 
 .rodape { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--borda); color: var(--texto-fraco); font-size: 0.78rem; }
 
+/* Rodape completo do site: fundo Noite fixo (identidade), colunas de links.
+   Cores fixas de proposito — o rodape e escuro nas duas marcas e nos dois
+   temas; e o "chao" da pagina. */
+.pe-site { margin: 56px -20px -64px; background: #0a1029; color: #8fa0c9; padding: 40px 20px 26px; border-radius: 18px 18px 0 0; }
+.pe-grade { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 28px; }
+@media (max-width: 860px) { .pe-grade { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .pe-grade { grid-template-columns: 1fr; } }
+.pe-marca p { margin: 0; font-size: 0.88rem; line-height: 1.6; }
+.pe-logo { font-family: var(--fonte-titulo); font-weight: 800; font-size: 1.25rem; margin: 0 0 8px !important; }
+.pe-logo b { color: #ffffff; }
+.pe-logo i { color: #f80838; font-style: normal; }
+.pe-site h3 { color: #ffffff; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 10px; }
+.pe-site ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 0.9rem; }
+.pe-site a { color: #c9d2e8; text-decoration: none; }
+.pe-site a:hover { color: #ffffff; text-decoration: underline; }
+.pe-baixo { max-width: 960px; margin: 28px auto 0; padding-top: 16px; border-top: 1px solid #243259; display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; font-size: 0.78rem; }
+
+/* Paginas legais */
+.legal { max-width: 68ch; }
+.legal h1 { font-size: 1.7rem; margin: 6px 0 2px; color: var(--realce); }
+.legal h2 { font-size: 1.05rem; margin: 26px 0 6px; color: var(--realce); }
+.legal p { margin: 0 0 10px; }
+
 /* ===================== PAINEL ===================== */
 
 .entrar-tela { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
