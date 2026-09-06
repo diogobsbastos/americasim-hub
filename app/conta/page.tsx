@@ -7,6 +7,7 @@ import { marcaAtual } from "../../lib/marcas";
 import ShellCliente from "../ShellCliente";
 import { IcoQr } from "../Icones";
 import FiltroEsims, { type PedidoLista } from "./FiltroEsims";
+import BotaoReenviar from "./BotaoReenviar";
 
 export const dynamic = "force-dynamic";
 
@@ -43,11 +44,21 @@ export default async function MeusPedidos() {
         <h1 className="ct-ola">Falta confirmar seu e-mail</h1>
         <p className="nota" style={{ maxWidth: "52ch" }}>
           Por segurança, os pedidos só aparecem depois que você confirmar que este e-mail é seu.
-          O e-mail de confirmação chega em breve — ou entre com o Google, que confirma na hora.
+          Enviamos um link de confirmação assim que a conta foi criada — ele vale por 3 dias.
         </p>
-        <p style={{ marginTop: 16 }}>
-          <a className="botao secundario" href="/conta/entrar">Entrar com o Google →</a>
-        </p>
+        <div className="ct-cartao perfil-cartao" style={{ maxWidth: 440, marginTop: 18 }}>
+          <h2>Não recebeu o e-mail?</h2>
+          <p className="perfil-sub">
+            Procure também no spam. Se não achar, mandamos outro agora.
+          </p>
+          <BotaoReenviar email={email} />
+          <p className="fin-dica" style={{ marginTop: 14 }}>
+            Prefere pular esta etapa? Entrar com o Google confirma o e-mail na hora.
+          </p>
+          <p style={{ marginTop: 10 }}>
+            <a className="botao secundario" href="/conta/entrar">Entrar com o Google →</a>
+          </p>
+        </div>
       </ShellCliente>
     );
   }

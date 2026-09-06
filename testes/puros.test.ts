@@ -72,3 +72,25 @@ test("freio: janela deslizante libera quando o tempo passa", () => {
   while (Date.now() < depois) { /* espera 5ms */ }
   assert.equal(bater(chave, 1, 1).ok, true, "batida antiga saiu da janela");
 });
+
+// --- verificacao de e-mail (06/09) ---
+import { assinarVerificacaoEmail, contaDoTokenVerificacao } from "../lib/token.ts";
+
+test("token de verificacao: ida e volta devolve a conta", () => {
+  const conta = "11111111-2222-3333-4444-555555555555";
+  const t = assinarVerificacaoEmail(conta);
+  assert.equal(contaDoTokenVerificacao(t), conta);
+});
+
+test("token de verificacao: recusa adulteracao e lixo", () => {
+  const conta = "11111111-2222-3333-4444-555555555555";
+  const t = assinarVerificacaoEmail(conta);
+  const [id, exp, mac] = t.split(".");
+  // trocar a conta mantendo a assinatura NAO pode funcionar
+  assert.equal(contaDoTokenVerificacao(`99999999-2222-3333-4444-555555555555.${exp}.${mac}`), null);
+  // esticar a validade mantendo a assinatura tambem nao
+  assert.equal(contaDoTokenVerificacao(`${id}.${Number(exp) + 999999}.${mac}`), null);
+  assert.equal(contaDoTokenVerificacao(""), null);
+  assert.equal(contaDoTokenVerificacao("nao-e-token"), null);
+  assert.equal(contaDoTokenVerificacao(null), null);
+});

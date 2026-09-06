@@ -2,6 +2,7 @@ import { autenticar, erro } from "../../../../lib/api";
 import { db } from "../../../../lib/db";
 import { assinarSessao, hashSenha } from "../../../../lib/conta";
 import { bater, ipDaRequisicao, respostaFreio } from "../../../../lib/limite";
+import { enfileirarVerificacao } from "../../../../lib/verificacao";
 
 // Freio de criacao em massa (auditoria 06/09): sem isto, um robo enche
 // `conta_cliente` de contas e nos custa um scrypt por linha.
@@ -44,6 +45,15 @@ export async function POST(req: Request) {
   );
   if (r.rows.length === 0) {
     return erro(409, "conta_existente", "Ja existe uma conta com este e-mail. Entre com a sua senha ou com o Google.");
+  }
+
+  // O e-mail de confirmacao sai AGORA — sem ele a conta por senha nasce e morre
+  // sem ver pedido nenhum. Em try/catch de proposito: falha de fila nao pode
+  // derrubar a criacao da conta (o cliente pode pedir o reenvio depois).
+  try {
+    await enfileirarVerificacao(r.rows[0].id, canal.id);
+  } catch (e) {
+    console.error("criar conta: falha ao enfileirar verificacao:", String(e).slice(0, 200));
   }
 
   return Response.json({ sessao: assinarSessao(r.rows[0].id), verificado: false });

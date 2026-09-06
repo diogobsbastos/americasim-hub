@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { apiPost } from "../../lib/vitrine";
 import { COOKIE_SESSAO, DIAS_SESSAO } from "../../lib/conta";
-import type { EstadoConta } from "./tipos";
+import type { EstadoConta, EstadoPerfil } from "./tipos";
 
 // As acoes de conta da vitrine: falam com /v1/conta/* (nunca com o banco) e
 // guardam a sessao em cookie httpOnly — o navegador nunca ve o token via JS.
@@ -51,4 +51,26 @@ export async function sair(): Promise<void> {
   const c = await cookies();
   c.delete(COOKIE_SESSAO);
   redirect("/conta/entrar");
+}
+
+// Reenvia o e-mail de confirmacao. Devolve estado (e nao redirect) para a
+// pessoa ver a confirmacao NA MESMA tela onde clicou — sem recarregar e sem
+// perder o lugar.
+export async function reenviarVerificacao(
+  _anterior: EstadoPerfil,
+  _form: FormData,
+): Promise<EstadoPerfil> {
+  const c = await cookies();
+  const sessao = c.get(COOKIE_SESSAO)?.value ?? "";
+  if (!sessao) redirect("/conta/entrar");
+
+  const r = await apiPost("/v1/conta/reenviar", { sessao });
+  if (!r.ok) {
+    if (r.erro_codigo === "sessao_invalida") redirect("/conta/entrar");
+    return { erro: r.erro_mensagem, ok: "" };
+  }
+  if (r.dados?.ja_verificado) {
+    return { erro: "", ok: "Seu e-mail já está confirmado — recarregue a página." };
+  }
+  return { erro: "", ok: "E-mail enviado! Confira sua caixa de entrada (e o spam)." };
 }

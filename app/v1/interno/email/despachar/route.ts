@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { conferirSegredo } from "../../segredo";
 import { db } from "../../../../../lib/db";
 import { lerCodigo } from "../../../../../lib/cripto-esim";
-import { assinarAcompanhamento } from "../../../../../lib/token";
+import { assinarAcompanhamento, assinarVerificacaoEmail } from "../../../../../lib/token";
 import { enviarEmailGmail, type AnexoEmail } from "../../../../../lib/email";
 import { linkInstalacaoAndroid, linkInstalacaoApple } from "../../../../../lib/instalacao";
 
@@ -19,6 +19,9 @@ export const runtime = "nodejs";
 //   entrega_qr — o e-mail DO PRODUTO: QR anexado, codigo manual e link assinado
 //               da pagina do pedido (valido por 1 ano — o e-mail E o link que o
 //               cliente guarda).
+//   verificar_email — confirma que o e-mail e do dono. Sem ele, conta criada por
+//               senha nunca ve os proprios pedidos (/v1/conta/pedidos recusa
+//               conta nao verificada).
 const MAX_TENTATIVAS = 8;
 
 export async function POST(req: Request) {
@@ -74,10 +77,57 @@ export async function POST(req: Request) {
 
 async function montar(modelo: string, payload: any): Promise<{ assunto: string; html: string; deNome?: string; anexos?: AnexoEmail[] }> {
   if (modelo === "entrega_qr") return montarEntrega(String(payload?.pedido_id ?? ""));
+  if (modelo === "verificar_email") {
+    return montarVerificacao(String(payload?.conta_id ?? ""), String(payload?.base ?? ""));
+  }
   if (modelo === "generico") {
     return { assunto: String(payload?.assunto ?? "AmericaSim"), html: String(payload?.html ?? "") };
   }
   throw new Error(`modelo de notificacao desconhecido: ${modelo}`);
+}
+
+// O TOKEN NASCE AQUI, no instante do envio — nao na hora de enfileirar. Assim
+// ele nao fica guardado em `notificacao`, e a validade de 72h conta do envio
+// real (inclusive de uma retentativa), nao de quando a linha entrou na fila.
+async function montarVerificacao(contaId: string, base: string) {
+  if (!contaId) throw new Error("payload sem conta_id");
+  const r = await db.query(
+    `select email::text as email, verificado from conta_cliente where id = $1`,
+    [contaId],
+  );
+  if (r.rows.length === 0) throw new Error("conta nao encontrada");
+  // Verificou entre o enfileiramento e o envio (ex.: entrou pelo Google)? Entao
+  // este e-mail perdeu o proposito — nao mandar e melhor que mandar.
+  if (r.rows[0].verificado === true) throw new Error("conta ja verificada; e-mail dispensado");
+
+  const raiz = base && base.startsWith("https://") ? base.replace(/\/+$/, "") : "https://americasim.com.br";
+  const marca = raiz.includes("viagemsim") ? "ViagemSim" : "AmericaSim";
+  const cores = marca === "ViagemSim"
+    ? { titulo: "#0f2a4a", acento: "#1e5aab", rodape: "#0f2a4a", sufixo: "Sim" }
+    : { titulo: "#001b54", acento: "#f80838", rodape: "#0a1029", sufixo: "Sim" };
+  const prefixo = marca.endsWith("Sim") ? marca.slice(0, -3) : marca;
+
+  const link = `${raiz}/conta/verificar?t=${encodeURIComponent(assinarVerificacaoEmail(contaId))}`;
+
+  const html =
+    `<div style="background:#f7f8fc;padding:24px 12px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a2233">` +
+    `<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e6f0;border-radius:14px;overflow:hidden">` +
+      `<div style="padding:18px 26px;border-bottom:3px solid ${cores.acento};font-size:22px;font-weight:800;letter-spacing:-0.5px">` +
+        (marca === "AmericaSim"
+          ? `<img src="https://americasim.com.br/marca/logo-horizontal.png" alt="AmericaSim" width="200" height="23" style="display:block;border:0" />`
+          : `<span style="color:${cores.titulo}">${prefixo}</span><span style="color:${cores.acento}">${cores.sufixo}</span>`) +
+      `</div>` +
+      `<div style="padding:24px 26px;font-size:15px;line-height:1.6">` +
+        `<h1 style="margin:0 0 10px;font-size:20px;line-height:1.3;color:${cores.titulo}">Confirme seu e-mail</h1>` +
+        `<p style="margin:0 0 14px">É rápido: um toque no botão abaixo e sua conta fica pronta — aí você vê todos os seus eSIMs, com QR e guia de instalação, num lugar só.</p>` +
+        `<p style="margin:20px 0 6px;text-align:center"><a href="${link}" style="background:${cores.acento};color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:12px;display:inline-block;font-weight:700">Confirmar meu e-mail</a></p>` +
+        `<p style="margin:16px 0 0;font-size:13px;color:#59627a">O link vale por 3 dias. Se o botão não funcionar, copie e cole este endereço no navegador:<br><span style="word-break:break-all;color:${cores.titulo}">${link}</span></p>` +
+        `<p style="margin:14px 0 0;font-size:13px;color:#59627a"><b>Não foi você que criou esta conta?</b> Ignore este e-mail: sem a confirmação, ela não dá acesso a pedido nenhum.</p>` +
+      `</div>` +
+      `<div style="background:${cores.rodape};color:#8fa0c9;padding:14px 26px;font-size:12px;line-height:1.6">${marca} · internet de viagem sem roaming e sem susto</div>` +
+    `</div></div>`;
+
+  return { assunto: `Confirme seu e-mail — ${marca}`, html, deNome: marca };
 }
 
 async function montarEntrega(pedidoId: string) {
