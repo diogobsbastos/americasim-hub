@@ -132,6 +132,7 @@ button:hover:not(:disabled) { background: var(--marca-forte); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .erro { color: var(--erro); font-size: 0.86rem; margin: 2px 0 0; }
+.feito { color: var(--ok); font-size: 0.86rem; font-weight: 600; margin: 2px 0 0; }
 .nota { color: var(--texto-fraco); font-size: 0.88rem; margin: 16px 0 0; }
 
 /* ===================== LOJA ===================== */
@@ -400,6 +401,14 @@ table.comp2 { width: 100%; border-collapse: collapse; background: var(--superfic
   display: flex; flex-direction: column;
 }
 .ct-cartao-topo { display: flex; align-items: flex-start; gap: 12px; }
+
+/* ===== Meu perfil (/conta/perfil): dois cartoes — contato e senha ===== */
+.perfil-grade { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); max-width: 920px; margin-top: 18px; align-items: start; }
+@media (max-width: 720px) { .perfil-grade { grid-template-columns: 1fr; } }
+.perfil-cartao { padding: 24px; }
+.perfil-cartao h2 { font-family: var(--fonte-titulo); font-size: 1.1rem; margin: 0 0 4px; }
+.perfil-sub { margin: 0 0 16px; color: var(--texto-fraco); font-size: 0.85rem; }
+.perfil-cartao input:disabled { background: var(--superficie-2); color: var(--texto-fraco); }
 .ct-ico {
   display: inline-grid; place-items: center; width: 42px; height: 42px;
   border-radius: 12px; background: var(--marca-suave); color: var(--marca); flex-shrink: 0;
@@ -540,6 +549,10 @@ table.comp2 { width: 100%; border-collapse: collapse; background: var(--superfic
 /* ===================== PAINEL ===================== */
 
 .entrar-tela { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+/* Entrar/criar conta da LOJA: a cena de viagem (a mesma do hero) vive atras
+   do cartao — .cena ja e absoluta com z-index 0; o cartao sobe para z 1. */
+.entrar-cena { position: relative; overflow: hidden; background: #e8eefc; }
+.entrar-cena > .entrar-caixa { position: relative; z-index: 1; }
 .entrar-caixa {
   width: 100%; max-width: 400px; background: var(--superficie);
   border: 1px solid var(--borda); border-radius: 18px; padding: 32px; box-shadow: var(--sombra);

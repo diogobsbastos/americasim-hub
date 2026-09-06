@@ -2,6 +2,7 @@ import Link from "next/link";
 import { marcaAtual } from "../../../lib/marcas";
 import FormCriar from "../FormCriar";
 import Logotipo from "../../Logotipo";
+import CenaViagem from "../../CenaViagem";
 import { googleConfigurado } from "../../../lib/google";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,8 @@ export default async function Criar() {
   const temGoogle = await googleConfigurado();
 
   return (
-    <main className="entrar-tela">
+    <main className="entrar-tela entrar-cena">
+      <CenaViagem />
       <div className="entrar-caixa">
         <Link href="/" aria-label="Voltar para a loja">
           <Logotipo codigo={marca.codigo} nome={marca.nome} />

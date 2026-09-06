@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Logotipo from "./Logotipo";
-import { IcoCelular, IcoChat, IcoFerramenta, IcoIlimitado, IcoQr } from "./Icones";
+import { IcoCelular, IcoChat, IcoFerramenta, IcoIlimitado, IcoPessoa, IcoQr } from "./Icones";
 import { sair } from "./conta/acoes";
 
 // O SHELL da area do cliente (padrao: painel do QueroConsertar) — sidebar com
@@ -22,7 +22,7 @@ export default function ShellCliente({
   nome: string;
   temBackend: boolean;
   logado: boolean;
-  ativo: "esims" | "nenhum";
+  ativo: "esims" | "perfil" | "nenhum";
   children: React.ReactNode;
 }) {
   return (
@@ -35,6 +35,9 @@ export default function ShellCliente({
         <nav className="ct-nav">
           <Link className={ativo === "esims" ? "ct-item ativo" : "ct-item"} href="/conta">
             <IcoQr /> <span>Meus eSIMs</span>
+          </Link>
+          <Link className={ativo === "perfil" ? "ct-item ativo" : "ct-item"} href="/conta/perfil">
+            <IcoPessoa /> <span>Meu perfil</span>
           </Link>
           <Link className="ct-item" href="/#planos"><IcoIlimitado /> <span>Comprar eSIM</span></Link>
           <Link className="ct-item" href="/duvidas"><IcoChat /> <span>Central de dúvidas</span></Link>

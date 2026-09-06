@@ -2,6 +2,7 @@ import Link from "next/link";
 import { marcaAtual } from "../../../lib/marcas";
 import FormEntrar from "../FormEntrar";
 import Logotipo from "../../Logotipo";
+import CenaViagem from "../../CenaViagem";
 import { googleConfigurado } from "../../../lib/google";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,8 @@ export default async function Entrar({
   const aviso = sp.erro === "google" ? "Nao foi possivel entrar com o Google. Tente de novo ou use e-mail e senha." : "";
 
   return (
-    <main className="entrar-tela">
+    <main className="entrar-tela entrar-cena">
+      <CenaViagem />
       <div className="entrar-caixa">
         <Link href="/" aria-label="Voltar para a loja">
           <Logotipo codigo={marca.codigo} nome={marca.nome} />

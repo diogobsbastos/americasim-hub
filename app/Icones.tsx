@@ -47,6 +47,15 @@ export function IcoChat() {
   );
 }
 
+export function IcoPessoa() {
+  return (
+    <Svg>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5.5 20c.7-3.4 3.3-5 6.5-5s5.8 1.6 6.5 5" />
+    </Svg>
+  );
+}
+
 export function IcoEscudo() {
   return (
     <Svg>
