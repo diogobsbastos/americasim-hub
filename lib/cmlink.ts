@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { db } from "./db";
+import { podeChamar, registrarBloqueio } from "./guarda-cmlink";
 import { lerSegredoApp, ondeEstaOSegredo } from "./segredo-app";
 
 // Cliente da China Mobile International (CMLink) — Global Data SIM Platform V4.2.
@@ -194,6 +195,16 @@ export async function chamarCmlink(rota: string, corpo: unknown, op: OpcoesChama
   const vazio: RespostaCmlink = { ok: false, http: 0, ms: 0, code: "", description: "", json: null, texto: "", requisicaoId: null, erroRede: "" };
   if (!appkey || !appsecret) {
     return { ...vazio, erroRede: "sem credencial: guarde AppKey e AppSecret na tela Operadoras (ou no ambiente do servico)" };
+  }
+
+  // O GUARDA vem ANTES da rede (lib/guarda-cmlink.ts). A chave do master abre a
+  // conta inteira da EasySim4u — a operadora nao oferece escopo restrito —, entao
+  // esta e a unica trava que existe: escrita so em chip que esta no nosso estoque.
+  const veredito = await podeChamar(op.operacao, corpo);
+  if (!veredito.ok) {
+    await registrarBloqueio(operadoraId, op.operacao, veredito.motivo, corpo, op.pedidoId ?? null, op.itemId ?? null);
+    console.error(`cmlink: BLOQUEADO pelo guarda — ${op.operacao}: ${veredito.motivo}`);
+    return { ...vazio, erroRede: `bloqueado pelo guarda: ${veredito.motivo}` };
   }
 
   const url = `${cfg.host}/aep/${rota}`;
