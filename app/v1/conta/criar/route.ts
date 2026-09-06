@@ -1,6 +1,12 @@
 import { autenticar, erro } from "../../../../lib/api";
 import { db } from "../../../../lib/db";
 import { assinarSessao, hashSenha } from "../../../../lib/conta";
+import { bater, ipDaRequisicao, respostaFreio } from "../../../../lib/limite";
+
+// Freio de criacao em massa (auditoria 06/09): sem isto, um robo enche
+// `conta_cliente` de contas e nos custa um scrypt por linha.
+const JANELA_CRIAR_MS = 60 * 60 * 1000;
+const MAX_CONTAS_POR_IP = 5;
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +31,9 @@ export async function POST(req: Request) {
   // Teto: scrypt processa a entrada inteira — senha de megabytes e CPU de
   // graca para atacante (auditoria 06/09). 200 chars cobre qualquer gerenciador.
   if (senha.length > 200) return erro(400, "senha_longa", "A senha pode ter no maximo 200 caracteres.");
+
+  const freio = bater(`criar:ip:${ipDaRequisicao(req)}`, MAX_CONTAS_POR_IP, JANELA_CRIAR_MS);
+  if (!freio.ok) return respostaFreio(freio.esperaSegundos);
 
   const r = await db.query(
     `insert into conta_cliente (email, senha_hash)

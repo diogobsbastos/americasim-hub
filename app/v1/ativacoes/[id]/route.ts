@@ -3,6 +3,13 @@ import { autenticar, erro } from "../../../../lib/api";
 import { lerCodigo } from "../../../../lib/cripto-esim";
 import { db } from "../../../../lib/db";
 import { linkInstalacaoAndroid, linkInstalacaoApple } from "../../../../lib/instalacao";
+import { bater, ipDaRequisicao, perdoar, respostaFreio } from "../../../../lib/limite";
+
+// Freio (auditoria 06/09): quem tem o link do pedido conhece o id da ativacao e
+// so precisa acertar o E-MAIL para revelar o QR — que E o produto. Sem freio,
+// isso e adivinhavel por lista. 8 tentativas por ativacao a cada 15 min.
+const JANELA_REVELAR_MS = 15 * 60 * 1000;
+const MAX_REVELAR = 8;
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +36,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return erro(400, "corpo_invalido", "email e obrigatorio no corpo.");
   }
 
+  // Antes de qualquer consulta: freio por ativacao (o alvo) e por IP.
+  const chaveAtivacao = `revelar:ativacao:${id}`;
+  const freio = bater(chaveAtivacao, MAX_REVELAR, JANELA_REVELAR_MS);
+  if (!freio.ok) return respostaFreio(freio.esperaSegundos);
+  const freioIp = bater(`revelar:ip:${ipDaRequisicao(req)}`, MAX_REVELAR * 4, JANELA_REVELAR_MS);
+  if (!freioIp.ok) return respostaFreio(freioIp.esperaSegundos);
+
   // O bytea sai CRU daqui. O `convert_from(..., 'UTF8')` de antes so funcionava
   // com texto claro; agora quem transforma bytes em codigo e o Node, com a
   // chave que o servidor de banco nao tem — que e o ponto inteiro da mudanca
@@ -43,6 +57,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     [id, canal.id, email],
   );
   if (r.rows.length === 0) return erro(404, "nao_encontrado", "Ativacao nao encontrada.");
+
+  // Acertou o e-mail: e o dono. Zera o contador desta ativacao para o cliente
+  // poder reabrir a pagina do pedido a vontade.
+  perdoar(chaveAtivacao);
 
   const a = r.rows[0];
 

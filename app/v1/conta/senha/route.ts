@@ -1,6 +1,12 @@
 import { autenticar, erro } from "../../../../lib/api";
 import { db } from "../../../../lib/db";
 import { conferirSenha, hashSenha, verificarSessao } from "../../../../lib/conta";
+import { bater, ipDaRequisicao, perdoar, respostaFreio } from "../../../../lib/limite";
+
+// Freio: com uma sessao roubada, adivinhar a senha ATUAL aqui daria ao ladrao a
+// troca da senha. 8 tentativas por conta a cada 15 min.
+const JANELA_SENHA_MS = 15 * 60 * 1000;
+const MAX_SENHA = 8;
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +40,12 @@ export async function POST(req: Request) {
     return erro(400, "senha_longa", "A senha pode ter no maximo 200 caracteres.");
   }
 
+  const chaveConta = `senha:conta:${contaId}`;
+  const freio = bater(chaveConta, MAX_SENHA, JANELA_SENHA_MS);
+  if (!freio.ok) return respostaFreio(freio.esperaSegundos);
+  const freioIp = bater(`senha:ip:${ipDaRequisicao(req)}`, MAX_SENHA * 3, JANELA_SENHA_MS);
+  if (!freioIp.ok) return respostaFreio(freioIp.esperaSegundos);
+
   const r = await db.query(
     `select senha_hash from conta_cliente where id = $1`,
     [contaId],
@@ -50,6 +62,7 @@ export async function POST(req: Request) {
     }
   }
 
+  perdoar(chaveConta);
   await db.query(
     `update conta_cliente set senha_hash = $2 where id = $1`,
     [contaId, hashSenha(senhaNova)],
