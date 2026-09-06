@@ -64,12 +64,18 @@ export default async function Finalizar({
   // checkout: sem perfil, o formulario so vem vazio.
   let emailConta = "";
   let telefoneConta = "";
+  let contaPendente = false;
   const sessao = (await cookies()).get(COOKIE_SESSAO)?.value ?? "";
   if (sessao) {
     const perfil = await apiPost("/v1/conta/perfil", { sessao });
     if (perfil.ok) {
       emailConta = String(perfil.dados?.email ?? "");
       telefoneConta = String(perfil.dados?.telefone ?? "");
+      // Logado mas com e-mail ainda nao confirmado: a compra funciona igual,
+      // so a lista de pedidos na conta e que fica vazia ate confirmar. Avisar
+      // AQUI, e nao depois do pagamento — descobrir depois de pagar e a pior
+      // hora possivel, e vira chamado no suporte.
+      contaPendente = perfil.dados?.verificado === false;
     }
   }
 
@@ -87,7 +93,23 @@ export default async function Finalizar({
         </div>
       </header>
 
-      {!achado ? (
+      {!r.ok ? (
+        /* O catalogo caiu. Dizer "plano nao encontrado" aqui seria mentir e
+           mandar o cliente embora por um problema NOSSO — ele tentaria outro
+           plano e veria a mesma tela. */
+        <div className="aviso">
+          <h1>Não conseguimos carregar os planos agora</h1>
+          <p>
+            Foi um problema nosso, não com o seu link. Recarregue a página em alguns
+            segundos — se continuar, responda o e-mail do seu último pedido ou fale com a
+            gente pela <Link href="/duvidas">Central de dúvidas</Link>.
+          </p>
+          <p className="fin-dica">Detalhe técnico: {r.erro_mensagem} ({r.erro_codigo})</p>
+          <p style={{ marginTop: 16 }}>
+            <Link className="botao" href={`/finalizar?sku=${encodeURIComponent(sku)}`}>Tentar de novo</Link>
+          </p>
+        </div>
+      ) : !achado ? (
         <div className="aviso">
           <h1>Plano não encontrado</h1>
           <p>
@@ -116,6 +138,17 @@ export default async function Finalizar({
             <p className="faixa">
               <strong>Modo demonstração.</strong> Nenhum pagamento é cobrado: o pedido é
               considerado pago na hora.
+            </p>
+          ) : null}
+
+          {/* Aviso, nunca bloqueio: quem nao confirmou o e-mail compra do mesmo
+              jeito e recebe o QR normalmente. O que muda e so a lista na conta. */}
+          {contaPendente ? (
+            <p className="faixa">
+              <strong>Falta confirmar seu e-mail.</strong> Pode comprar normalmente — o QR
+              chega no seu e-mail assim que o pagamento passar. A confirmação serve para os
+              pedidos aparecerem em <Link href="/conta">Minha conta</Link>; o link de
+              confirmação foi enviado quando você criou a conta.
             </p>
           ) : null}
 

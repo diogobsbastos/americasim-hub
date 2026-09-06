@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   if (!contaId) return erro(401, "sessao_invalida", "Entre de novo na sua conta.");
 
   const r = await db.query(
-    `select cc.email::text as email, c.nome, c.telefone,
+    `select cc.email::text as email, c.nome, c.telefone, cc.verificado,
             (cc.senha_hash is not null) as tem_senha
        from conta_cliente cc
        left join cliente c on lower(c.email::text) = lower(cc.email::text)
@@ -51,6 +51,11 @@ export async function POST(req: Request) {
     // Conta que entrou so pelo Google nao tem senha: a tela de perfil oferece
     // "criar senha" (sem pedir a atual) em vez de "trocar senha".
     tem_senha: p.tem_senha === true,
+    // Quem ainda nao confirmou o e-mail COMPRA normalmente (o QR vai por e-mail
+    // e a pagina do pedido abre por link assinado), mas nao ve os pedidos na
+    // conta. O checkout avisa disso ANTES da compra — descobrir depois de pagar
+    // e a pior hora possivel.
+    verificado: p.verificado === true,
     backend: adm.rows.length > 0,
   });
 }
