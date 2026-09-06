@@ -30,6 +30,9 @@ export async function POST(req: Request) {
   if (senhaNova.length < 8) {
     return erro(400, "senha_curta", "A nova senha precisa ter pelo menos 8 caracteres.");
   }
+  if (senhaNova.length > 200) {
+    return erro(400, "senha_longa", "A senha pode ter no maximo 200 caracteres.");
+  }
 
   const r = await db.query(
     `select senha_hash from conta_cliente where id = $1`,

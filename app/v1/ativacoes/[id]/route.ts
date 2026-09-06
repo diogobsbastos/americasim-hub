@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import { autenticar, erro } from "../../../../lib/api";
 import { lerCodigo } from "../../../../lib/cripto-esim";
 import { db } from "../../../../lib/db";
+import { linkInstalacaoAndroid, linkInstalacaoApple } from "../../../../lib/instalacao";
 
 export const dynamic = "force-dynamic";
 
@@ -84,8 +85,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     status: a.status,
     qr_png_base64: qr,
     codigo_manual: { smdp: partes[1] ?? "", ativacao: partes[2] ?? "" },
-    link_apple: `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(lpa)}`,
-    link_android: lpa,
+    // Antes: link_apple saia preenchido mesmo com LPA vazio (botao quebrado em
+    // pedido ainda nao entregue) e link_android era o LPA cru, que navegador
+    // nenhum abre. Agora: links universais dos dois lados, vazios sem codigo.
+    link_apple: linkInstalacaoApple(lpa),
+    link_android: linkInstalacaoAndroid(lpa),
     instrucoes_url: null,
   });
 }

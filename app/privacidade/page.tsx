@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
   const m = await marcaAtual();
-  return { title: `Política de privacidade — ${m.nome}` };
+  return { title: `Política de privacidade — ${m.nome}`, robots: { index: false, follow: false } };
 }
 
 // Texto redigido internamente (v1, 05/09/2026), orientado pela LGPD — passar

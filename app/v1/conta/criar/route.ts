@@ -22,6 +22,9 @@ export async function POST(req: Request) {
   const senha = String(corpo?.senha ?? "");
   if (!email.includes("@")) return erro(400, "email_invalido", "Informe um e-mail valido.");
   if (senha.length < 8) return erro(400, "senha_curta", "A senha precisa de pelo menos 8 caracteres.");
+  // Teto: scrypt processa a entrada inteira — senha de megabytes e CPU de
+  // graca para atacante (auditoria 06/09). 200 chars cobre qualquer gerenciador.
+  if (senha.length > 200) return erro(400, "senha_longa", "A senha pode ter no maximo 200 caracteres.");
 
   const r = await db.query(
     `insert into conta_cliente (email, senha_hash)

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
   const m = await marcaAtual();
-  return { title: `Política de reembolso — ${m.nome}` };
+  return { title: `Política de reembolso — ${m.nome}`, robots: { index: false, follow: false } };
 }
 
 // A mesma politica que ja comunicamos na loja e na Central de duvidas, agora

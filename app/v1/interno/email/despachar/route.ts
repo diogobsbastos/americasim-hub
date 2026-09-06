@@ -4,6 +4,7 @@ import { db } from "../../../../../lib/db";
 import { lerCodigo } from "../../../../../lib/cripto-esim";
 import { assinarAcompanhamento } from "../../../../../lib/token";
 import { enviarEmailGmail, type AnexoEmail } from "../../../../../lib/email";
+import { linkInstalacaoAndroid, linkInstalacaoApple } from "../../../../../lib/instalacao";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -129,6 +130,10 @@ async function montarEntrega(pedidoId: string) {
     blocos.push(
       `<tr><td style="padding:14px 0;border-top:1px solid #e2e6f0">` +
         `<p style=\"margin:0 0 6px;font-weight:bold;color:${cores.titulo}\">eSIM ${i}${linha.iccid ? ` · chip …${String(linha.iccid).slice(-5)}` : ""}</p>` +
+        // Instalacao 1 TOQUE (padrao dos concorrentes): links universais Apple
+        // e Android por eSIM. Sao links de texto — o CTA unico do e-mail segue
+        // sendo o botao do pedido, logo abaixo.
+        `<p style=\"margin:0 0 4px\">Instalar direto: <a href=\"${linkInstalacaoApple(lpa)}\" style=\"color:${cores.acento};font-weight:700\">no iPhone</a> (iOS 17.4+) · <a href=\"${linkInstalacaoAndroid(lpa)}\" style=\"color:${cores.acento};font-weight:700\">no Android</a> (Android 10+) — abra este e-mail no proprio aparelho.</p>` +
         `<p style=\"margin:0 0 4px\">QR code: <b>anexo esim-${i}.png</b> (abra e escaneie)</p>` +
         `<p style=\"margin:0;font-size:13px;color:#59627a\">Código manual — SM-DP+: <code>${partes[1] ?? ""}</code> · Ativação: <code>${partes[2] ?? ""}</code></p>` +
       `</td></tr>`,

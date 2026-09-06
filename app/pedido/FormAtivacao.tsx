@@ -61,7 +61,7 @@ function GuiaInstalacao({ ehIos }: { ehIos: boolean | null }) {
       ) : (
         <ol className="guia-passos">
           <li>Conecte o aparelho ao <b>Wi-Fi</b>.</li>
-          <li>Toque em <b>Instalar no Android</b> acima; se o aparelho nao abrir o instalador, siga os passos abaixo.</li>
+          <li>No Android 10 ou mais novo (com servicos do Google), toque em <b>Instalar no Android</b> acima — o instalador abre com o codigo preenchido. Se nao abrir, siga os passos abaixo.</li>
           <li>Abra <b>Configuracoes → Rede e internet → SIMs</b> (em alguns aparelhos: Conexoes → Gerenciador de SIM).</li>
           <li>Toque em <b>Adicionar eSIM / Baixar novo chip</b> e escaneie o QR.</li>
           <li>Sem outra tela para escanear? Escolha <b>inserir codigo manualmente</b> e cole o codigo de ativacao completo copiado acima.</li>
@@ -104,14 +104,17 @@ export default function FormAtivacao({ ativacaoId }: { ativacaoId: string }) {
           <p className="nota">QR ainda nao disponivel — use o codigo manual abaixo.</p>
         )}
 
+        {/* O botao CRIMSON e o do aparelho em que a pessoa esta AGORA — quem
+            abre no Android nao deve ter "Instalar no iPhone" como acao
+            principal. No computador (ehIos null), Apple fica como padrao. */}
         <div className="botoes" style={{ margin: "0 0 14px" }}>
           {estado.link_apple ? (
-            <a className="botao" href={estado.link_apple}>
+            <a className={ehIos === false ? "botao secundario" : "botao"} href={estado.link_apple}>
               Instalar no iPhone
             </a>
           ) : null}
           {estado.link_android ? (
-            <a className="botao secundario" href={estado.link_android}>
+            <a className={ehIos === false ? "botao" : "botao secundario"} href={estado.link_android}>
               Instalar no Android
             </a>
           ) : null}

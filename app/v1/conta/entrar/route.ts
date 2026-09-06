@@ -18,7 +18,9 @@ export async function POST(req: Request) {
   }
   const email = String(corpo?.email ?? "").trim().toLowerCase();
   const senha = String(corpo?.senha ?? "");
-  if (!email.includes("@") || !senha) {
+  // `> 200`: nenhuma senha legitima passa disso (criar impoe o mesmo teto) e
+  // corta o custo de scrypt sobre entradas gigantes. Erro generico, como tudo aqui.
+  if (!email.includes("@") || !senha || senha.length > 200) {
     return erro(401, "credenciais_invalidas", "E-mail ou senha incorretos.");
   }
 

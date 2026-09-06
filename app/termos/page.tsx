@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
   const m = await marcaAtual();
-  return { title: `Termos de uso — ${m.nome}` };
+  return { title: `Termos de uso — ${m.nome}`, robots: { index: false, follow: false } };
 }
 
 // Texto redigido internamente (v1, 05/09/2026) — passar por revisao juridica
