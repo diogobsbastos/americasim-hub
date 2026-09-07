@@ -22,8 +22,23 @@
 .wrap.loja-larga { max-width: none; padding: 0; }
 .faixa-secao { width: 100%; padding: 56px 0; }
 .faixa-secao.fundo-suave { background: var(--superficie-2); }
-.faixa-secao.fundo-marca { background: var(--marca-suave); }
-.faixa-secao.fundo-noite { background: #0a1029; color: #c9d2e8; }
+
+/* ATENCAO — licao paga em 07/09, na primeira versao disto:
+   o fundo de uma faixa NUNCA pode ser um token que INVERTE com o tema.
+   A versao anterior usava `--marca-suave` direto. Na AmericaSim passou (o
+   forced-light do :has(main.wrap) segura os tokens no claro), mas na ViagemSim,
+   que nao tem essa trava, o aparelho em modo escuro resolvia --marca-suave para
+   #3B1526 (vinho escuro) e o titulo continuava #0F2A4A (navy escuro): texto
+   escuro sobre fundo escuro, secao inteira ilegivel.
+   A cor agora e SEMPRE uma variacao sutil da propria superficie — entao
+   qualquer texto que funciona sobre o cartao continua funcionando aqui, nos
+   dois temas e em qualquer marca. */
+.faixa-secao.fundo-marca {
+  background: color-mix(in srgb, var(--marca) 7%, var(--superficie));
+}
+@supports not (background: color-mix(in srgb, red 7%, white)) {
+  .faixa-secao.fundo-marca { background: var(--superficie-2); }
+}
 .dentro { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
 
 /* A primeira faixa (menu + hero) cola no topo: sem respiro antes do logo. */
