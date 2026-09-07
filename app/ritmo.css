@@ -1,0 +1,76 @@
+/* ============================================================================
+   RITMO DE SEÇÕES (07/09/2026)
+
+   Vem do estudo da home de referência da categoria (dissecação de 06/09): a
+   riqueza visual daquelas páginas não vem das cores em si — vem do RITMO. Cada
+   bloco tem o próprio fundo, de borda a borda, e quem rola sente que "mudou de
+   ambiente". A nossa home era branca e cinza do topo ao rodapé: uma página só,
+   comprida e chapada. Aqui o mesmo recurso, com a NOSSA paleta.
+
+   POR QUE ESTE ARQUIVO É SEPARADO DO globals.css:
+   as regras abaixo SOBRESCREVEM regras do globals (tamanho dos h2 de seção,
+   raio dos cartões, margens). Elas precisam vir DEPOIS — e a ordem está
+   garantida pela ordem dos `import` em app/layout.tsx, que é determinística no
+   bundle. Ao mexer aqui, lembre: globals primeiro, ritmo depois.
+   ========================================================================= */
+
+/* `main.wrap.loja-larga` zera o container (como .ct-shell já fazia no painel)
+   para as faixas irem de borda a borda; `.dentro` devolve a largura de leitura.
+   O `wrap` CONTINUA na classe porque é ele que liga o tema claro da loja
+   (html[data-marca="americasim"]:has(main.wrap)) — tirar quebraria a vitrine
+   inteira no aparelho em modo escuro. */
+.wrap.loja-larga { max-width: none; padding: 0; }
+.faixa-secao { width: 100%; padding: 56px 0; }
+.faixa-secao.fundo-suave { background: var(--superficie-2); }
+.faixa-secao.fundo-marca { background: var(--marca-suave); }
+.faixa-secao.fundo-noite { background: #0a1029; color: #c9d2e8; }
+.dentro { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
+
+/* A primeira faixa (menu + hero) cola no topo: sem respiro antes do logo. */
+.faixa-secao:first-of-type { padding-top: 18px; }
+
+/* Títulos de seção maiores — o padrão da categoria é título grande em contraste
+   com texto pequeno e cinza. Antes todos os h2 tinham 1.15rem em caixa alta, o
+   que achatava a página inteira. */
+.beneficios h2, .passos3 h2, .comparativo h2, .faq h2 {
+  font-size: clamp(1.5rem, 3.4vw, 2.1rem);
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: -0.02em;
+  margin: 0 0 22px;
+  color: var(--realce);
+}
+.produto h1 {
+  font-size: clamp(1.4rem, 3vw, 1.9rem);
+  text-transform: none;
+  margin: 0 0 14px;
+}
+
+/* Cantos mais generosos e mais ar dentro dos cartões. */
+.plano, .ben, .passo3, .cat-cartao { border-radius: 20px; }
+.ben, .passo3 { padding: 24px; }
+.faixa-conf { border-radius: 999px; padding: 16px 22px; }
+
+/* Sem margem dupla: quem separa os blocos agora é a faixa, não a margem. */
+.beneficios, .passos3, .comparativo, .faq { margin-top: 0; }
+
+/* Meios de pagamento aceitos. Em TEXTO, não com os logos das bandeiras:
+   reproduzir marca de terceiro sem necessidade é risco que não precisamos. */
+.pagamentos {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 8px 14px; margin: 18px 0 0; font-size: 0.82rem; color: var(--texto-fraco);
+}
+.pagamentos b {
+  font-weight: 600; color: var(--texto); background: var(--superficie);
+  border: 1px solid var(--borda); border-radius: 8px; padding: 4px 10px;
+}
+
+/* FAQ em DUAS colunas: cabe o dobro de objeções na mesma altura de tela. */
+@media (min-width: 860px) {
+  .faq-colunas { column-count: 2; column-gap: 16px; }
+  .faq-colunas details { break-inside: avoid; margin-bottom: 10px; }
+}
+
+/* O rodapé agora vive fora do container: não precisa mais sangrar com margem
+   negativa para escapar do padding do wrap. */
+.loja-larga .pe-site { margin: 0; border-radius: 0; }

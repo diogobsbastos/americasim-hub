@@ -97,8 +97,10 @@ export default async function Loja() {
   );
 
   return (
-    <main className="wrap">
+    <main className="wrap loja-larga">
       {/* ===== MENU DO TOPO: logo real + navegacao + conta (ciente da sessao) ===== */}
+      <div className="faixa-secao">
+      <div className="dentro">
       <CabLoja codigo={marca.codigo} nome={marca.nome} />
 
       {/* ===== HERO: cena de viagem animada ATRAS + busca de plano POR CIMA
@@ -127,6 +129,11 @@ export default async function Loja() {
         </div>
         <HeroBusca opcoes={opcoesBusca} />
       </section>
+      </div>
+      </div>
+
+      <div className="faixa-secao fundo-suave">
+      <div className="dentro">
 
       {modoPg === "demonstracao" ? (
         <p className="faixa">
@@ -202,7 +209,20 @@ export default async function Loja() {
         <span>Suporte 24/7</span>
       </div>
 
+      {/* Meios de pagamento aceitos: some duvida na hora de decidir. Em texto,
+          e nao com os logos das bandeiras — reproduzir marca de terceiro sem
+          necessidade e risco que nao precisamos correr. */}
+      <p className="pagamentos" aria-label="formas de pagamento">
+        <span>Pague com</span>
+        <b>Pix</b><b>Visa</b><b>Mastercard</b><b>Elo</b><b>Amex</b><b>Apple&nbsp;Pay</b><b>Google&nbsp;Pay</b>
+      </p>
+
+      </div>
+      </div>
+
       {/* ===== POR QUE (grade ilustrada, estrutura de referencia) ===== */}
+      <div className="faixa-secao fundo-marca">
+      <div className="dentro">
       <section className="beneficios" aria-label="por que escolher">
         <h2>Por que viajar com a {marca.nome}?</h2>
         <div className="ben-grade">
@@ -238,8 +258,12 @@ export default async function Loja() {
           </div>
         </div>
       </section>
+      </div>
+      </div>
 
       {/* ===== COMO FUNCIONA ===== */}
+      <div className="faixa-secao">
+      <div className="dentro">
       <section id="como" className="passos3" aria-label="como funciona">
         <h2>Conectado em 3 passos</h2>
         <div className="passos3-grade">
@@ -257,8 +281,12 @@ export default async function Loja() {
           </div>
         </div>
       </section>
+      </div>
+      </div>
 
       {/* ===== COMPARATIVO (estrutura do demo) ===== */}
+      <div className="faixa-secao fundo-suave">
+      <div className="dentro">
       <section className="comparativo" aria-label="comparativo com roaming">
         <h2>{marca.nome} × roaming da sua operadora</h2>
         <div className="rolagem">
@@ -276,10 +304,15 @@ export default async function Loja() {
           </table>
         </div>
       </section>
+      </div>
+      </div>
 
       {/* ===== FAQ ===== */}
+      <div className="faixa-secao">
+      <div className="dentro">
       <section id="duvidas" className="faq" aria-label="perguntas frequentes">
         <h2>Perguntas frequentes</h2>
+        <div className="faq-colunas">
         <details>
           <summary>Meu celular aceita eSIM?</summary>
           <p>
@@ -308,10 +341,14 @@ export default async function Loja() {
             com o QR, o status e o guia de instalação.
           </p>
         </details>
+        </div>
         <p style={{ marginTop: 12 }}>
           <Link className="botao secundario" href="/duvidas">Ver todas as dúvidas →</Link>
         </p>
       </section>
+
+      </div>
+      </div>
 
       <Rodape />
     </main>
