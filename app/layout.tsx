@@ -1,8 +1,10 @@
 import "./globals.css";
-// DEPOIS do globals de proposito: ritmo.css sobrescreve regras dele (tamanho
-// dos titulos de secao, raio dos cartoes, margens). A ordem destes dois
-// imports E a cascata.
+// DEPOIS do globals de proposito: estes dois sobrescrevem regras dele. A ordem
+// dos imports E a cascata — mexer nela muda o site.
+//   ritmo.css  — estetica de secao (titulos, fundos de faixa, raio dos cartoes)
+//   toque.css  — ergonomia de dedo (area de toque em @media pointer: coarse)
 import "./ritmo.css";
+import "./toque.css";
 import { marcaAtual, cssDaMarca } from "../lib/marcas";
 
 // O titulo e as marcas de PWA saem da marca do dominio — por isso metadata
