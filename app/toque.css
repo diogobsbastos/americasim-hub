@@ -1,0 +1,60 @@
+/* ============================================================================
+   ÁREA DE TOQUE (07/09/2026)
+
+   Medido ao vivo em viagemsim.duckdns.org, viewport 375×812, user agent de
+   celular: 19 alvos abaixo de 44px de altura. Os piores são os links do
+   rodapé, com 17px — menos da metade do dedo de qualquer pessoa. O WCAG 2.5.5
+   (AAA) e as diretrizes da Apple e do Google pedem 44×44; o WCAG 2.2 exige no
+   mínimo 24×24, que os 17px do rodapé também não cumprem.
+
+   O gatilho é `pointer: coarse`, NÃO a largura da tela: quem precisa de alvo
+   grande é quem usa o DEDO. Um tablet de 1024px com dedo precisa; uma janela
+   estreita no desktop com mouse não — e nela um alvo inflado só afastaria as
+   coisas sem motivo.
+
+   Este arquivo é separado do ritmo.css porque trata de outra coisa: o ritmo é
+   estética de seção, isto é ergonomia. Ordem no layout.tsx:
+   globals → ritmo → toque.
+   ========================================================================= */
+
+@media (pointer: coarse) {
+  /* RODAPÉ — o pior caso (17px). A altura vem de min-height, e o `gap` do <ul>
+     cai para zero: o respiro agora é o próprio alvo, não um vão morto entre
+     dois alvos pequenos. Cresce o rodapé no celular, e é para crescer mesmo. */
+  .pe-site ul { gap: 0; }
+  .pe-site li > a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  /* FAQ — só o <summary> abre o acordeão; o padding do <details> em volta dele
+     é área morta que PARECE clicável. O margin negativo estica o summary até a
+     borda da caixa e o padding devolve o espaço interno: a aparência quase não
+     muda e a área tocável passa a ser a linha inteira.
+     Sem `display: flex` de propósito — no Chrome isso apagaria o triângulo
+     nativo do acordeão, e aí ninguém mais saberia que a linha abre. */
+  .faq summary {
+    padding: 10px 16px;
+    margin: -12px -16px;
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+  .faq details[open] summary { margin-bottom: 0; }
+
+  /* TOPO — "Entrar" e "Criar conta" estavam em 42px: faltavam 2px para o
+     mínimo. O logo estava em 26px. */
+  .cab-conta .botao { min-height: 44px; }
+  .cab > a { display: inline-flex; align-items: center; min-height: 44px; }
+
+  /* BUSCA — os dois <select> do cartão de busca estavam em 43px. É o primeiro
+     gesto de quem entra pelo celular; errar o toque aqui custa a venda. */
+  .busca-cartao select,
+  .busca-cartao input,
+  .busca-cartao button { min-height: 44px; }
+
+  /* Links soltos dentro de parágrafo (ex.: "Minha conta" na dúvida do FAQ):
+     não dá para inflar a caixa sem furar o texto, então o alvo cresce pelos
+     lados, que é o eixo livre numa linha de texto. */
+  .faq details p a { padding: 6px 2px; }
+}
